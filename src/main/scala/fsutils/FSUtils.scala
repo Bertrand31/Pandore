@@ -1,11 +1,10 @@
 package fsutils
 
-import java.io.{BufferedOutputStream, File, FileOutputStream}
-import scala.util.Using
+import java.io.{BufferedOutputStream, File, FileOutputStream, FileWriter}
+import scala.util.{Try, Using}
 import cats.implicits._
 import cats.effect.IO
-import scala.util.Try
-import java.io.FileWriter
+import java.io.FileNotFoundException
 
 sealed trait FSObject {
 
@@ -58,6 +57,13 @@ object FSFile {
       new FSFile(file)
     }
 
+  def fromPath(filePath: String): IO[FSFile] =
+    IO {
+      val file = new File(filePath)
+      if (file.exists && file.isFile) IO.pure(new FSFile(file))
+      else IO.raiseError(new FileNotFoundException)
+    }.flatten
+
   def fromFile(file: File): Try[FSFile] =
     Try {
       assert(file.exists && file.isFile)
@@ -103,7 +109,7 @@ case class FSDirectory(private val handle: File) extends FSObject {
               _
                 .toList
                 .map(file => file.getAbsolutePath.flatMap(forEachFileIn(_, file)))
-                .traverse(identity)
+                .sequence
                 .map(_.flatten)
             )
       }
@@ -123,6 +129,13 @@ object FSDirectory {
       }
       new FSDirectory(directory)
     }
+
+  def fromPath(directoryPath: String): IO[FSDirectory] =
+    IO {
+      val directory = new File(directoryPath)
+      if (directory.exists && directory.isDirectory) IO.pure(new FSDirectory(directory))
+      else IO.raiseError(new FileNotFoundException)
+    }.flatten
 
   def fromFile(directory: File): Try[FSDirectory] =
     Try {
