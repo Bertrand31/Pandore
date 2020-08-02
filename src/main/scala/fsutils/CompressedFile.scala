@@ -1,6 +1,7 @@
 package fsutils
 
-import java.io.{BufferedOutputStream, FileOutputStream}
+import java.io.{BufferedOutputStream, ByteArrayOutputStream, FileOutputStream}
+import java.nio.file.{Files, Paths}
 import scala.util.Using
 import org.apache.commons.compress.compressors.CompressorOutputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream
@@ -14,8 +15,6 @@ import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream
 import cats.implicits._
 import cats.effect.IO
-import java.nio.file.{Files, Paths}
-import java.io.ByteArrayOutputStream
 
 object Compression extends Enumeration {
 

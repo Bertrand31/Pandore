@@ -171,8 +171,6 @@ final case class FSDirectory(private val handle: File) extends FSObject {
 
 object FSDirectory {
 
-  def rename(to: String): IO[String] = ???
-
   def createAt(directoryPath: String): IO[FSDirectory] =
     IO {
       val directory = new File(directoryPath)
