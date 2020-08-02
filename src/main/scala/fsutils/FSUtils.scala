@@ -1,20 +1,20 @@
 package fsutils
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, FileWriter}
+import java.io.{BufferedOutputStream, File, FileNotFoundException, FileOutputStream, FileWriter}
 import scala.util.{Try, Using}
 import cats.implicits._
 import cats.effect.IO
-import java.io.FileNotFoundException
+import Compression._
 
 sealed trait FSObject {
 
-  def getAbsolutePath: IO[String]
+  def getAbsolutePath: String
 }
 
 case class FSFile(private val handle: File) extends FSObject {
 
-  def getAbsolutePath: IO[String] =
-    IO { handle.getAbsolutePath }
+  def getAbsolutePath: String =
+    handle.getAbsolutePath
 
   def size: IO[Long] =
     IO { handle.length }
@@ -26,12 +26,13 @@ case class FSFile(private val handle: File) extends FSObject {
         else IO.raiseError(new RuntimeException(s"Could not delete ${handle.getPath}"))
       )
 
-  private val NewLine = '\n'.toByte
+  private val NewLine = '\n'
+  private val NewLineByte = NewLine.toByte
 
   def writeByteLines[F[_]](data: Array[Array[Byte]]): IO[Unit] =
     IO {
       Using(new BufferedOutputStream(new FileOutputStream(handle, true))) { bos =>
-        data.foreach(line => bos.write(line :+ NewLine))
+        data.foreach(line => bos.write(line :+ NewLineByte))
       }.fold(IO.raiseError[Unit], IO.pure(_))
     }.flatten
 
@@ -40,9 +41,12 @@ case class FSFile(private val handle: File) extends FSObject {
       Using.resource(new FileWriter(handle))(writer =>
         lines
           .sliding(chunkSize, chunkSize)
-          .foreach((writer.write(_: String)) compose (_.mkString("\n") :+ '\n'))
+          .foreach((writer.write(_: String)) compose (_.mkString("\n") :+ NewLine))
       )
     }
+
+  def compressTo: Compression => CompressedFile =
+    CompressedFile(this, _)
 }
 
 object FSFile {
@@ -73,8 +77,8 @@ object FSFile {
 
 case class FSDirectory(private val handle: File) extends FSObject {
 
-  def getAbsolutePath: IO[String] =
-    IO { handle.getAbsolutePath }
+  def getAbsolutePath: String =
+    handle.getAbsolutePath
 
   def delete: IO[Unit] =
     IO { handle.delete }
@@ -108,14 +112,15 @@ case class FSDirectory(private val handle: File) extends FSObject {
             .flatMap(
               _
                 .toList
-                .map(file => file.getAbsolutePath.flatMap(forEachFileIn(_, file)))
-                .sequence
+                .traverse(file => forEachFileIn(file.getAbsolutePath, file))
                 .map(_.flatten)
             )
       }
 
-      getAbsolutePath.flatMap(forEachFileIn(_, this))
+      forEachFileIn(getAbsolutePath, this)
     }
+
+  def toJavaFile: File = this.handle
 }
 
 object FSDirectory {

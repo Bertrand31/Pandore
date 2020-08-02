@@ -8,6 +8,7 @@ version := "1.0"
 libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-core" % "2.1.1",
   "org.typelevel" %% "cats-effect" % "2.1.4",
+  "org.apache.commons" % "commons-compress" % "1.20",
   "org.scalatest" %% "scalatest" % "3.0.8" % Test,
 )
 
