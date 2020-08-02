@@ -9,6 +9,8 @@ import Compression._
 sealed trait FSObject {
 
   def getAbsolutePath: String
+
+  def toJavaFile: File
 }
 
 case class FSFile(private val handle: File) extends FSObject {
@@ -47,6 +49,8 @@ case class FSFile(private val handle: File) extends FSObject {
 
   def compressTo: Compression => CompressedFile =
     CompressedFile(this, _)
+
+  def toJavaFile: File = this.handle
 }
 
 object FSFile {

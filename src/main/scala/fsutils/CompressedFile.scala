@@ -27,30 +27,29 @@ import Compression._
 
 case class CompressedFile(private val file: FSFile, algorithm: Compression) {
 
-  private def compressor(bos: ByteArrayOutputStream): CompressorOutputStream =
+  private val compressedStream: ByteArrayOutputStream => CompressorOutputStream =
     algorithm match {
-      case BZ2       => new BZip2CompressorOutputStream(bos)
-      case DEFLATE   => new DeflateCompressorOutputStream(bos)
-      case GZ        => new GzipCompressorOutputStream(bos)
-      case LZMA      => new LZMACompressorOutputStream(bos)
-      case LZ4       => new FramedLZ4CompressorOutputStream(bos)
-      case PACK200   => new Pack200CompressorOutputStream(bos)
-      case SNAPPY    => new FramedSnappyCompressorOutputStream(bos)
-      case XZ        => new XZCompressorOutputStream(bos)
-      case ZSTANDARD => new ZstdCompressorOutputStream(bos)
+      case BZ2       => new BZip2CompressorOutputStream(_)
+      case DEFLATE   => new DeflateCompressorOutputStream(_)
+      case GZ        => new GzipCompressorOutputStream(_)
+      case LZMA      => new LZMACompressorOutputStream(_)
+      case LZ4       => new FramedLZ4CompressorOutputStream(_)
+      case PACK200   => new Pack200CompressorOutputStream(_)
+      case SNAPPY    => new FramedSnappyCompressorOutputStream(_)
+      case XZ        => new XZCompressorOutputStream(_)
+      case ZSTANDARD => new ZstdCompressorOutputStream(_)
     }
 
   def writeTo(directory: FSDirectory): IO[Unit] =
     IO {
       val byteArray = Files.readAllBytes(Paths.get(file.getAbsolutePath))
       Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
-        Using(compressor(bos)) { zstd =>
-          zstd.write(byteArray)
-          bos.toByteArray
+        Using(compressedStream(bos)) { compressed =>
+          compressed.write(byteArray)
           Using(new BufferedOutputStream(new FileOutputStream(directory.toJavaFile))) {
             _.write(bos.toByteArray)
           }
-        }.flatten
-      }.flatten.fold(IO.raiseError[Unit], IO.pure(_))
+        }
+      }.flatten.flatten.fold(IO.raiseError[Unit], IO.pure(_))
     }.flatten
 }
