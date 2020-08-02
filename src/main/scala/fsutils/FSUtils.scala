@@ -42,12 +42,12 @@ case class FSFile(private val handle: File) extends FSObject {
 
   def writeLinesProgressively(lines: => Iterator[_], chunkSize: Int = 10000): IO[Unit] =
     IO {
-      Using.resource(new FileWriter(handle))(writer =>
+      Using(new FileWriter(handle))(writer =>
         lines
           .sliding(chunkSize, chunkSize)
           .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
-      )
-    }
+      ).fold(IO.raiseError, IO.pure(_))
+    }.flatten
 
   def compressTo: Compression => CompressedFile =
     CompressedFile(this, _)
