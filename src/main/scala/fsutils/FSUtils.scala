@@ -1,13 +1,12 @@
 package fsutils
 
 import java.io.{BufferedOutputStream, File, FileNotFoundException, FileOutputStream, FileWriter}
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import scala.util.{Try, Using}
+import scala.io.Source
 import cats.implicits._
 import cats.effect.IO
 import Compression._
-import java.nio.file.StandardCopyOption
-import java.nio.file.Files
-import java.nio.file.Paths
 
 sealed trait FSObject {
 
@@ -19,6 +18,9 @@ sealed trait FSObject {
 }
 
 final case class FSFile(private val handle: File) extends FSObject {
+
+  def getLines: Iterator[String] =
+    Source.fromFile(this.handle).getLines
 
   def copyTo(destination: String): IO[Unit] =
     IO {
