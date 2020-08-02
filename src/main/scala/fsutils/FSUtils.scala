@@ -10,6 +10,8 @@ sealed trait FSObject {
 
   def getAbsolutePath: String
 
+  def size: IO[Long]
+
   def toJavaFile: File
 }
 
@@ -43,7 +45,7 @@ case class FSFile(private val handle: File) extends FSObject {
       Using.resource(new FileWriter(handle))(writer =>
         lines
           .sliding(chunkSize, chunkSize)
-          .foreach((writer.write(_: String)) compose (_.mkString("\n") :+ NewLine))
+          .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
       )
     }
 
@@ -123,6 +125,9 @@ case class FSDirectory(private val handle: File) extends FSObject {
 
       forEachFileIn(getAbsolutePath, this)
     }
+
+  def size: IO[Long] =
+    forEachFileBelow((_, f) => f.size).map(_.sum)
 
   def toJavaFile: File = this.handle
 }
