@@ -5,6 +5,9 @@ import scala.util.{Try, Using}
 import cats.implicits._
 import cats.effect.IO
 import Compression._
+import java.nio.file.StandardCopyOption
+import java.nio.file.Files
+import java.nio.file.Paths
 
 sealed trait FSObject {
 
@@ -15,7 +18,32 @@ sealed trait FSObject {
   def toJavaFile: File
 }
 
-case class FSFile(private val handle: File) extends FSObject {
+final case class FSFile(private val handle: File) extends FSObject {
+
+  def copyTo(destination: String): IO[Unit] =
+    IO {
+      Files.copy(
+        Paths.get(this.getAbsolutePath),
+        Paths.get(destination),
+        StandardCopyOption.REPLACE_EXISTING,
+      )
+    }.map(_ => ())
+
+  def moveTo(destination: String): IO[Unit] =
+    IO {
+      Files.move(
+        Paths.get(this.getAbsolutePath),
+        Paths.get(destination),
+        StandardCopyOption.REPLACE_EXISTING,
+      )
+    }.map(_ => ())
+
+  def renameTo(destination: String): IO[Unit] =
+    IO {
+      Try {
+        assert(this.handle.renameTo(new File(destination)))
+      }.fold(IO.raiseError[Unit], IO.pure(_))
+    }.flatten
 
   def getAbsolutePath: String =
     handle.getAbsolutePath
@@ -81,7 +109,14 @@ object FSFile {
     }
 }
 
-case class FSDirectory(private val handle: File) extends FSObject {
+final case class FSDirectory(private val handle: File) extends FSObject {
+
+  def renameTo(destination: String): IO[Unit] =
+    IO {
+      Try {
+        assert(this.handle.renameTo(new File(destination)))
+      }.fold(IO.raiseError[Unit], IO.pure(_))
+    }.flatten
 
   def getAbsolutePath: String =
     handle.getAbsolutePath
@@ -134,6 +169,8 @@ case class FSDirectory(private val handle: File) extends FSObject {
 
 object FSDirectory {
 
+  def rename(to: String): IO[String] = ???
+
   def createAt(directoryPath: String): IO[FSDirectory] =
     IO {
       val directory = new File(directoryPath)
@@ -152,8 +189,6 @@ object FSDirectory {
     }.flatten
 
   def fromFile(directory: File): Try[FSDirectory] =
-    Try {
-      assert(directory.exists && directory.isDirectory)
-      new FSDirectory(directory)
-    }
+    Try { assert(directory.exists && directory.isDirectory) }
+      .map(_ => FSDirectory(directory))
 }
