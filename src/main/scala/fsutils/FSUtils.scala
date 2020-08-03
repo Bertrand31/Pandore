@@ -1,16 +1,13 @@
 package fsutils
 
-import java.io.{BufferedOutputStream, File, FileNotFoundException, FileOutputStream, FileWriter}
+import java.io.{BufferedOutputStream, BufferedInputStream, ByteArrayOutputStream, File, FileNotFoundException, FileOutputStream, FileInputStream, FileWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import scala.util.{Try, Using}
 import scala.io.Source
 import cats.implicits._
 import cats.effect.IO
-import Compression._
-import java.io.ByteArrayOutputStream
-import java.io.ByteArrayInputStream
-import java.io.FileInputStream
-import java.io.BufferedInputStream
+import org.apache.commons.compress.compressors.{CompressorOutputStream, CompressorInputStream}
+import CompressionAlgorithm.CompressionAlgorithm
 
 sealed trait FSObject {
 
@@ -83,13 +80,18 @@ final case class FSFile(private val handle: File) extends FSObject {
       ).fold(IO.raiseError, IO.pure(_))
     }.flatten
 
-  protected case class TransientC(private val handle: FSFile, private val compression: Compression) {
+  protected case class TransientCompressedFile(
+    private val handle: FSFile, private val algo: CompressionAlgorithm,
+  ) {
+
+    private val compressor: ByteArrayOutputStream => CompressorOutputStream =
+      CompressionUtils.getCompressor(algo)
 
     def writeTo(directory: FSDirectory): IO[Unit] =
       IO {
         val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
         Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
-          Using(CompressionUtils.getCompressor(compression, bos)) { compressed =>
+          Using(compressor(bos)) { compressed =>
             compressed.write(byteArray)
             Using(new BufferedOutputStream(new FileOutputStream(directory.toJavaFile))) {
               _.write(bos.toByteArray)
@@ -102,7 +104,7 @@ final case class FSFile(private val handle: File) extends FSObject {
       IO {
         val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
         Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
-          Using(CompressionUtils.getCompressor(compression, bos)) { compressed =>
+          Using(compressor(bos)) { compressed =>
             compressed.write(byteArray)
             bos.toByteArray
           }
@@ -110,16 +112,21 @@ final case class FSFile(private val handle: File) extends FSObject {
       }.flatten
   }
 
-  val compress: Compression => TransientC =
-    TransientC(this, _)
+  val compress: CompressionAlgorithm => TransientCompressedFile =
+    TransientCompressedFile(this, _)
 
-  protected case class TransientD(private val handle: FSFile, private val compression: Compression) {
+  protected case class TransientDecompressedFile(
+    private val handle: FSFile, private val algo: CompressionAlgorithm,
+  ) {
+
+    private val decompressor: BufferedInputStream => CompressorInputStream =
+      DecompressionUtils.getDecompressor(algo)
 
     // TODO: improve this very inefficient method
     def writeTo(destinationPath: String): IO[FSFile] =
       IO {
         val bis = new BufferedInputStream(new FileInputStream(handle.toJavaFile))
-        val inputStream = DecompressionUtils.getDecompressor(compression, bis)
+        val inputStream = decompressor(bis)
         val bufferedSrc  = scala.io.Source.fromInputStream(inputStream)
         val destinationFile = new File(destinationPath)
         Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
@@ -128,8 +135,8 @@ final case class FSFile(private val handle: File) extends FSObject {
       }.flatten
   }
 
-  val decompress: Compression => TransientD =
-    TransientD(this, _)
+  val decompress: CompressionAlgorithm => TransientDecompressedFile =
+    TransientDecompressedFile(this, _)
 
   def toJavaFile: File = this.handle
 }
