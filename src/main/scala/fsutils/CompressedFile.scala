@@ -1,20 +1,18 @@
 package fsutils
 
-import java.io.{BufferedOutputStream, ByteArrayOutputStream, FileOutputStream}
-import java.nio.file.{Files, Paths}
-import scala.util.Using
-import org.apache.commons.compress.compressors.CompressorOutputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream
-import org.apache.commons.compress.compressors.deflate.DeflateCompressorOutputStream
-import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
-import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorOutputStream
-import org.apache.commons.compress.compressors.lzma.LZMACompressorOutputStream
-import org.apache.commons.compress.compressors.pack200.Pack200CompressorOutputStream
-import org.apache.commons.compress.compressors.snappy.FramedSnappyCompressorOutputStream
-import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream
-import org.apache.commons.compress.compressors.zstandard.ZstdCompressorOutputStream
-import cats.implicits._
-import cats.effect.IO
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import org.apache.commons.compress.compressors._
+import org.apache.commons.compress.compressors.bzip2._
+import org.apache.commons.compress.compressors.deflate._
+import org.apache.commons.compress.compressors.gzip._
+import org.apache.commons.compress.compressors.lz4._
+import org.apache.commons.compress.compressors.lzma._
+import org.apache.commons.compress.compressors.pack200._
+import org.apache.commons.compress.compressors.snappy._
+import org.apache.commons.compress.compressors.xz._
+import org.apache.commons.compress.compressors.zstandard._
+import java.io.FileInputStream
+import java.io.BufferedInputStream
 
 object Compression extends Enumeration {
 
@@ -24,31 +22,34 @@ object Compression extends Enumeration {
 
 import Compression._
 
-case class CompressedFile(private val file: FSFile, algorithm: Compression) {
+object CompressionUtils {
 
-  private val compressedStream: ByteArrayOutputStream => CompressorOutputStream =
-    algorithm match {
-      case BZ2       => new BZip2CompressorOutputStream(_)
-      case DEFLATE   => new DeflateCompressorOutputStream(_)
-      case GZ        => new GzipCompressorOutputStream(_)
-      case LZMA      => new LZMACompressorOutputStream(_)
-      case LZ4       => new FramedLZ4CompressorOutputStream(_)
-      case PACK200   => new Pack200CompressorOutputStream(_)
-      case SNAPPY    => new FramedSnappyCompressorOutputStream(_)
-      case XZ        => new XZCompressorOutputStream(_)
-      case ZSTANDARD => new ZstdCompressorOutputStream(_)
+  def getCompressor(compression: Compression, bos: ByteArrayOutputStream): CompressorOutputStream =
+    compression match {
+      case BZ2       => new BZip2CompressorOutputStream(bos)
+      case DEFLATE   => new DeflateCompressorOutputStream(bos)
+      case GZ        => new GzipCompressorOutputStream(bos)
+      case LZMA      => new LZMACompressorOutputStream(bos)
+      case LZ4       => new FramedLZ4CompressorOutputStream(bos)
+      case PACK200   => new Pack200CompressorOutputStream(bos)
+      case SNAPPY    => new FramedSnappyCompressorOutputStream(bos)
+      case XZ        => new XZCompressorOutputStream(bos)
+      case ZSTANDARD => new ZstdCompressorOutputStream(bos)
     }
+}
 
-  def writeTo(directory: FSDirectory): IO[Unit] =
-    IO {
-      val byteArray = Files.readAllBytes(Paths.get(file.getAbsolutePath))
-      Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
-        Using(compressedStream(bos)) { compressed =>
-          compressed.write(byteArray)
-          Using(new BufferedOutputStream(new FileOutputStream(directory.toJavaFile))) {
-            _.write(bos.toByteArray)
-          }
-        }
-      }.flatten.flatten.fold(IO.raiseError[Unit], IO.pure(_))
-    }.flatten
+object DecompressionUtils {
+
+  def getDecompressor(compression: Compression, bis: BufferedInputStream): CompressorInputStream =
+    compression match {
+      case BZ2       => new BZip2CompressorInputStream(bis)
+      case DEFLATE   => new DeflateCompressorInputStream(bis)
+      case GZ        => new GzipCompressorInputStream(bis)
+      case LZMA      => new LZMACompressorInputStream(bis)
+      case LZ4       => new FramedLZ4CompressorInputStream(bis)
+      case PACK200   => new Pack200CompressorInputStream(bis)
+      case SNAPPY    => new FramedSnappyCompressorInputStream(bis)
+      case XZ        => new XZCompressorInputStream(bis)
+      case ZSTANDARD => new ZstdCompressorInputStream(bis)
+    }
 }

@@ -7,6 +7,10 @@ import scala.io.Source
 import cats.implicits._
 import cats.effect.IO
 import Compression._
+import java.io.ByteArrayOutputStream
+import java.io.ByteArrayInputStream
+import java.io.FileInputStream
+import java.io.BufferedInputStream
 
 sealed trait FSObject {
 
@@ -79,8 +83,42 @@ final case class FSFile(private val handle: File) extends FSObject {
       ).fold(IO.raiseError, IO.pure(_))
     }.flatten
 
-  def compressTo: Compression => CompressedFile =
-    CompressedFile(this, _)
+  protected case class TransientC(private val handle: FSFile, private val compression: Compression) {
+
+    def writeTo(directory: FSDirectory): IO[Unit] =
+      IO {
+        val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
+        Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
+          Using(CompressionUtils.getCompressor(compression, bos)) { compressed =>
+            compressed.write(byteArray)
+            Using(new BufferedOutputStream(new FileOutputStream(directory.toJavaFile))) {
+              _.write(bos.toByteArray)
+            }
+          }
+        }.flatten.flatten.fold(IO.raiseError[Unit], IO.pure(_))
+      }.flatten
+  }
+
+  val compress: Compression => TransientC =
+    TransientC(this, _)
+
+  protected case class TransientD(private val handle: FSFile, private val compression: Compression) {
+
+    // TODO: improve this very inefficient method
+    def writeTo(destinationPath: String): IO[FSFile] =
+      IO {
+        val bis = new BufferedInputStream(new FileInputStream(handle.toJavaFile))
+        val inputStream = DecompressionUtils.getDecompressor(compression, bis)
+        val bufferedSrc  = scala.io.Source.fromInputStream(inputStream)
+        val destinationFile = new File(destinationPath)
+        Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
+          _.write(bufferedSrc.iter.toArray.map(_.toByte))
+        }.fold(IO.raiseError, _ => IO.pure(FSFile(destinationFile)))
+      }.flatten
+  }
+
+  val decompress: Compression => TransientD =
+    TransientD(this, _)
 
   def toJavaFile: File = this.handle
 }
