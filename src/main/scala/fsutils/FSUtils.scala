@@ -97,6 +97,17 @@ final case class FSFile(private val handle: File) extends FSObject {
           }
         }.flatten.flatten.fold(IO.raiseError[Unit], IO.pure(_))
       }.flatten
+
+    def toByteArray: IO[Array[Byte]] =
+      IO {
+        val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
+        Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
+          Using(CompressionUtils.getCompressor(compression, bos)) { compressed =>
+            compressed.write(byteArray)
+            bos.toByteArray
+          }
+        }.flatten.fold(IO.raiseError[Array[Byte]], IO.pure(_))
+      }.flatten
   }
 
   val compress: Compression => TransientC =
