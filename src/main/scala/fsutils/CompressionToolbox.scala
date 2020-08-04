@@ -22,8 +22,8 @@ import CompressionAlgorithm._
 
 object CompressionUtils {
 
-  def getCompressor(compression: CompressionAlgorithm): ByteArrayOutputStream => CompressorOutputStream =
-    compression match {
+  def getCompressor(algo: CompressionAlgorithm): ByteArrayOutputStream => CompressorOutputStream =
+    algo match {
       case BZ2       => new BZip2CompressorOutputStream(_)
       case DEFLATE   => new DeflateCompressorOutputStream(_)
       case GZ        => new GzipCompressorOutputStream(_)
@@ -32,14 +32,14 @@ object CompressionUtils {
       case PACK200   => new Pack200CompressorOutputStream(_)
       case SNAPPY    => new FramedSnappyCompressorOutputStream(_)
       case XZ        => new XZCompressorOutputStream(_)
-      case ZSTANDARD => new ZstdCompressorOutputStream(_)
+      case ZSTANDARD => new ZstdCompressorOutputStream(_, 8)
     }
 }
 
 object DecompressionUtils {
 
-  def getDecompressor(compression: CompressionAlgorithm): BufferedInputStream => CompressorInputStream =
-    compression match {
+  def getDecompressor(algo: CompressionAlgorithm): BufferedInputStream => CompressorInputStream =
+    algo match {
       case BZ2       => new BZip2CompressorInputStream(_)
       case DEFLATE   => new DeflateCompressorInputStream(_)
       case GZ        => new GzipCompressorInputStream(_)

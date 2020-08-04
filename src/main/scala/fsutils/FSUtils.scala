@@ -1,6 +1,9 @@
 package fsutils
 
-import java.io.{BufferedOutputStream, BufferedInputStream, ByteArrayOutputStream, File, FileNotFoundException, FileOutputStream, FileInputStream, FileWriter}
+import java.io.{
+  BufferedOutputStream, BufferedInputStream, ByteArrayOutputStream, File,
+  FileNotFoundException, FileOutputStream, FileInputStream, FileWriter,
+}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import scala.util.{Try, Using}
 import scala.io.Source
@@ -87,17 +90,19 @@ final case class FSFile(private val handle: File) extends FSObject {
     private val compressor: ByteArrayOutputStream => CompressorOutputStream =
       CompressionUtils.getCompressor(algo)
 
-    def writeTo(directory: FSDirectory): IO[Unit] =
+    def writeTo(targetPath: String): IO[FSFile] =
       IO {
+        val targetFile = new File(targetPath)
         val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
         Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
           Using(compressor(bos)) { compressed =>
             compressed.write(byteArray)
-            Using(new BufferedOutputStream(new FileOutputStream(directory.toJavaFile))) {
+            Using(new BufferedOutputStream(new FileOutputStream(targetFile))) {
               _.write(bos.toByteArray)
             }
-          }
-        }.flatten.flatten.fold(IO.raiseError[Unit], IO.pure(_))
+          }.flatten *>
+          FSFile.fromFile(targetFile)
+        }.flatten.fold(IO.raiseError[FSFile], IO.pure(_))
       }.flatten
 
     def toByteArray: IO[Array[Byte]] =
@@ -112,7 +117,7 @@ final case class FSFile(private val handle: File) extends FSObject {
       }.flatten
   }
 
-  val compress: CompressionAlgorithm => TransientCompressedFile =
+  val compressWith: CompressionAlgorithm => TransientCompressedFile =
     TransientCompressedFile(this, _)
 
   protected case class TransientDecompressedFile(
@@ -135,7 +140,7 @@ final case class FSFile(private val handle: File) extends FSObject {
       }.flatten
   }
 
-  val decompress: CompressionAlgorithm => TransientDecompressedFile =
+  val decompressFrom: CompressionAlgorithm => TransientDecompressedFile =
     TransientDecompressedFile(this, _)
 
   def toJavaFile: File = this.handle
