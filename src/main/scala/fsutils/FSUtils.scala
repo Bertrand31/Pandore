@@ -191,7 +191,7 @@ final case class FSDirectory(private val handle: File) extends FSObject {
         else IO.raiseError(new RuntimeException(s"Could not delete ${handle.getPath}"))
       )
 
-  def getObjectsBelow: IO[Array[FSObject]] =
+  def getContents: IO[Array[FSObject]] =
     IO {
       handle.listFiles.map({
         case f if f.isFile => FSFile.fromFile(f)
