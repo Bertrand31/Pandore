@@ -22,8 +22,9 @@ sealed trait FSObject[F[_]] {
   def toJavaFile: File
 }
 
-final case class FSFile[F[_]](private val handle: File)
-                       (implicit S: Sync[F], E: MonadError[F, Throwable]) extends FSObject[F] {
+final case class FSFile[F[_]](
+  private val handle: File,
+)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends FSObject[F] {
 
   def getLines: Iterator[String] =
     Source.fromFile(this.handle).getLines
@@ -138,7 +139,7 @@ final case class FSFile[F[_]](private val handle: File)
         val destinationFile = new File(destinationPath)
         Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
           _.write(bufferedSrc.iter.toArray.map(_.toByte))
-        }.fold(E.raiseError[FSFile[F]], _ => S.pure(FSFile[F](destinationFile)))
+        }.fold(E.raiseError[FSFile[F]], _ => S.pure(FSFile(destinationFile)))
       }.flatten
   }
 
@@ -164,19 +165,18 @@ object FSFile {
                     (implicit S: Sync[F], E: MonadError[F, Throwable]): F[FSFile[F]] =
     S.delay {
       val file = new File(filePath)
-      if (file.exists && file.isFile) S.pure(new FSFile[F](file))
+      if (file.exists && file.isFile) S.pure(FSFile(file))
       else E.raiseError[FSFile[F]](new FileNotFoundException)
     }.flatten
 
   def fromFile[F[_]](file: File)(implicit S: Sync[F]): Try[FSFile[F]] =
-    Try {
-      assert(file.exists && file.isFile)
-      FSFile[F](file)
-    }
+    Try { assert(file.exists && file.isFile) }
+      .map(_ => FSFile(file))
 }
 
-final case class FSDirectory[F[_]](private val handle: File)
-                            (implicit S: Sync[F], E: MonadError[F, Throwable]) extends FSObject[F] {
+final case class FSDirectory[F[_]](
+  private val handle: File,
+)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends FSObject[F] {
 
   def renameTo(destination: String)(implicit S: Sync[F], E: MonadError[F, Throwable]): F[Unit] =
     S.delay {
@@ -198,8 +198,8 @@ final case class FSDirectory[F[_]](private val handle: File)
   def getContents: F[Array[FSObject[F]]] =
     S.delay {
       handle.listFiles.map({
-        case f if f.isFile => FSFile.fromFile[F](f)
-        case d             => FSDirectory.fromFile[F](d)
+        case f if f.isFile => FSFile.fromFile(f)
+        case d             => FSDirectory.fromFile(d)
       }).flatMap(_.toOption)
     }
 
@@ -213,7 +213,7 @@ final case class FSDirectory[F[_]](private val handle: File)
 
     def forEachFileIn(path: String, fsObj: FSObject[F]): F[List[A]] =
       fsObj match {
-        case f: FSFile[F] => cb(path, f).map(List[A](_))
+        case f: FSFile[F] => cb(path, f).map(List(_))
         case d: FSDirectory[F] =>
           d
             .getContents
@@ -243,18 +243,18 @@ object FSDirectory {
         directory.getParentFile.mkdirs
         directory.mkdir
       }
-      new FSDirectory(directory)
+      FSDirectory(directory)
     }
 
   def fromPath[F[_]](directoryPath: String)
                     (implicit S: Sync[F], E: MonadError[F, Throwable]): F[FSDirectory[F]] =
     S.delay {
       val directory = new File(directoryPath)
-      if (directory.exists && directory.isDirectory) S.pure(new FSDirectory[F](directory))
+      if (directory.exists && directory.isDirectory) S.pure(FSDirectory(directory))
       else E.raiseError[FSDirectory[F]](new FileNotFoundException)
     }.flatten
 
   def fromFile[F[_]](directory: File)(implicit S: Sync[F]): Try[FSDirectory[F]] =
     Try { assert(directory.exists && directory.isDirectory) }
-      .map(_ => FSDirectory[F](directory))
+      .map(_ => FSDirectory(directory))
 }
