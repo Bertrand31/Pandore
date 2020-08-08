@@ -80,7 +80,7 @@ final case class FSFile[F[_]](
     S.delay {
       Using(new BufferedOutputStream(new FileOutputStream(handle, true))) { bos =>
         data.foreach(line => bos.write(line :+ NewLineByte))
-      }.fold(E.raiseError[Unit], S.pure(_))
+      }.fold(E.raiseError[Unit], S.pure)
     }.flatten
 
   def writeLinesProgressively(lines: => Iterator[_], chunkSize: Int = 10000): F[Unit] =
@@ -89,7 +89,7 @@ final case class FSFile[F[_]](
         lines
           .sliding(chunkSize, chunkSize)
           .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
-      ).fold(E.raiseError[Unit], S.pure[Unit](_))
+      ).fold(E.raiseError[Unit], S.pure)
     }.flatten
 
   protected case class TransientCompressedFile(
@@ -112,7 +112,7 @@ final case class FSFile[F[_]](
               }
             }.flatten *>
             FSFile.fromFile[F](targetFile)
-          }.flatten.fold(E.raiseError[FSFile[F]], S.pure(_))
+          }.flatten.fold(E.raiseError[FSFile[F]], S.pure)
         }.flatten
       )
 
@@ -125,7 +125,7 @@ final case class FSFile[F[_]](
               compressed.write(byteArray)
               bos.toByteArray
             }
-          }.flatten.fold(E.raiseError[Array[Byte]], S.pure[Array[Byte]](_))
+          }.flatten.fold(E.raiseError[Array[Byte]], S.pure)
         }.flatten
       )
   }
@@ -192,7 +192,7 @@ final case class FSDirectory[F[_]](
     S.delay {
       Try {
         assert(this.handle.renameTo(new File(destination)))
-      }.fold(E.raiseError[Unit], S.pure(_))
+      }.fold(E.raiseError[Unit], S.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
