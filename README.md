@@ -46,6 +46,7 @@ import fsutils._
 for {
   file             <- FileHandle.fromPath[IO]("/x/y/z.txt.snappy")
   decompressedFile <- file.decompressFrom(CompressionAlgorithm.SNAPPY).writeTo("/x/y/z.txt")
+  compressedFile   <- decompressedFile.compressTo(CompressionAlgorithm.ZSTANDARD).writeTo("/x/y/z.zstd")
 } yield decompressedFile
 ```
 
