@@ -2,7 +2,7 @@ scalaVersion := "2.13.2"
 
 name := "FSUtils"
 organization := "bertrand"
-version := "1.0"
+version := "0.1"
 
 
 libraryDependencies ++= Seq(
@@ -28,6 +28,10 @@ scalacOptions ++= Seq(
 scalacOptions in Test --= Seq(
   "-Xlint:_",
 )
+
+credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
+
+publishTo := Some("Sonatype Snapshots Nexus" at "https://oss.sonatype.org/content/repositories/snapshots")
 
 // Test suite settings
 fork in Test := true
