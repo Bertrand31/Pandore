@@ -57,7 +57,7 @@ final case class FSFile[F[_]](
     S.delay {
       Try {
         assert(this.handle.renameTo(new File(destination)))
-      }.fold(E.raiseError[Unit], S.pure(_))
+      }.fold(E.raiseError[Unit], S.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
@@ -72,6 +72,21 @@ final case class FSFile[F[_]](
         if (_) S.unit
         else E.raiseError(new RuntimeException(s"Could not delete ${handle.getPath}"))
       )
+
+  def canRead: F[Boolean] =
+    S.delay { handle.canRead }
+
+  def canWrite: F[Boolean] =
+    S.delay { handle.canWrite }
+
+  def canExecute: F[Boolean] =
+    S.delay { handle.canExecute }
+
+  def isHidden: F[Boolean] =
+    S.delay { handle.isHidden }
+
+  def lastModified: F[Long] =
+    S.delay { handle.lastModified }
 
   private val NewLine = '\n'
   private val NewLineByte = NewLine.toByte
@@ -182,6 +197,12 @@ object FSFile {
   def fromFile[F[_]](file: File)(implicit S: Sync[F]): Try[FSFile[F]] =
     Try { assert(file.exists && file.isFile) }
       .map(_ => FSFile(file))
+
+  def existsAt[F[_]](path: String)(implicit S: Sync[F]): F[Boolean] =
+    S.delay {
+      val handle = new File(path)
+      handle.exists && handle.isFile
+    }
 }
 
 final case class FSDirectory[F[_]](
@@ -190,9 +211,8 @@ final case class FSDirectory[F[_]](
 
   def renameTo(destination: String)(implicit S: Sync[F], E: MonadError[F, Throwable]): F[Unit] =
     S.delay {
-      Try {
-        assert(this.handle.renameTo(new File(destination)))
-      }.fold(E.raiseError[Unit], S.pure)
+      Try { assert(this.handle.renameTo(new File(destination))) }
+        .fold(E.raiseError[Unit], S.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
@@ -241,6 +261,12 @@ final case class FSDirectory[F[_]](
   def size: F[Long] =
     forEachFileBelow((_, f) => f.size).map(_.sum)
 
+  def getFilePathsBelow: F[List[String]] =
+    forEachFileBelow((_, f) => f.getAbsolutePath)
+
+  def lastModified: F[Long] =
+    S.delay { handle.lastModified }
+
   def toJavaFile: File = this.handle
 }
 
@@ -267,4 +293,10 @@ object FSDirectory {
   def fromFile[F[_]](directory: File)(implicit S: Sync[F]): Try[FSDirectory[F]] =
     Try { assert(directory.exists && directory.isDirectory) }
       .map(_ => FSDirectory(directory))
+
+  def existsAt[F[_]](path: String)(implicit S: Sync[F]): F[Boolean] =
+    S.delay {
+      val handle = new File(path)
+      handle.exists && handle.isDirectory
+    }
 }
