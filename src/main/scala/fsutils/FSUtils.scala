@@ -37,8 +37,9 @@ final case class FSFile[F[_]](
           Paths.get(destination),
           StandardCopyOption.REPLACE_EXISTING,
         )
+        ()
       }
-    ).map(_ => ())
+    )
 
   def moveTo(destination: String): F[Unit] =
     this.getAbsolutePath.flatMap(path =>
@@ -48,8 +49,9 @@ final case class FSFile[F[_]](
           Paths.get(destination),
           StandardCopyOption.REPLACE_EXISTING,
         )
+        ()
       }
-    ).map(_ => ())
+    )
 
   def renameTo(destination: String): F[Unit] =
     S.delay {
@@ -59,7 +61,7 @@ final case class FSFile[F[_]](
     }.flatten
 
   def getAbsolutePath: F[String] =
-    S.delay(handle.getAbsolutePath)
+    S.delay { handle.getAbsolutePath }
 
   def size: F[Long] =
     S.delay { handle.length }
@@ -211,11 +213,11 @@ final case class FSDirectory[F[_]](
       }).flatMap(_.toOption)
     }
 
-  def getFoldersBelow: F[Array[FSDirectory[F]]] =
-    S.delay { handle.listFiles.map(FSDirectory.fromFile[F]).flatMap(_.toOption) }
+  def getDirectoriesBelow: F[Array[FSDirectory[F]]] =
+    this.getContents.map(_ collect { case d: FSDirectory[F] => d })
 
   def getFilesBelow: F[Array[FSFile[F]]] =
-    S.delay { handle.listFiles.map(FSFile.fromFile[F]).flatMap(_.toOption) }
+    this.getContents.map(_ collect { case f: FSFile[F] => f })
 
   def forEachFileBelow[A](cb: (String, FSFile[F]) => F[A]): F[List[A]] = {
 
