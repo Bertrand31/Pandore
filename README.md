@@ -14,10 +14,11 @@ some of its opinionated approaches.
 Here are some simple, self-explanatory uses of the library:
 
 ```scala
-import fsutils._
+import cats.effect.IO
+import fsutils.{DirectoryHandle, FileHandle}
 
 for {
-  file     <- FSFile.createAt("/my/new/file.csv")
+  file     <- FileHandle.createAt[IO]("/my/new/file.csv")
   _        <- file.writeLinesProgressively(Iterator("foo", "bar", "bar"))
   fileSize <- file.size
   _        <- logger.debug(s"Successfuly wrote a $fileSize bytes file")
@@ -26,20 +27,27 @@ for {
 ```
 
 ```scala
+import cats.effect.IO
 import fsutils._
 
 for {
-  dir         <- FSDirectory.fromFile(new File("/foo/bar")
-  _           <- dir.forEachFileBelow((path: String, file: FSFile) => file.moveTo(path ++ ".old"))
+  dir         <- DirectoryHandle.fromFile[IO](new File("/foo/bar")
   contentSize <- dir.size
-} yield contentSize
+  _           <- dir.forEachFileBelow(uploadToS3)
+  _           <- logger.debug(s"Uploaded $contentSize bytes to S3")
+  _           <- dir.delete // Will recursively delete the directory and its contents
+} yield ()
 ```
 
 ```scala
+import cats.effect.IO
 import fsutils._
 
 for {
-  file             <- FSFile.fromPath("/x/y/z.txt.snappy")
+  file             <- FileHandle.fromPath[IO]("/x/y/z.txt.snappy")
   decompressedFile <- file.decompressFrom(CompressionAlgorithm.SNAPPY).writeTo("/x/y/z.txt")
 } yield decompressedFile
 ```
+
+If you ever were to decide to open Pandore's box, you can do so by calling the `.toJavaFile`
+method on either of the data structures this library exposoes.

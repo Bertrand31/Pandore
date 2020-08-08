@@ -15,7 +15,7 @@ import cats.implicits._
 import org.apache.commons.compress.compressors.{CompressorOutputStream, CompressorInputStream}
 import CompressionAlgorithm.CompressionAlgorithm
 
-sealed trait FSObject[F[_]] {
+sealed trait PureHandle[F[_]] {
 
   def getAbsolutePath: F[String]
 
@@ -26,9 +26,9 @@ sealed trait FSObject[F[_]] {
   def toJavaFile: File
 }
 
-final case class FSFile[F[_]](
+final case class FileHandle[F[_]](
   private val handle: File,
-)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends FSObject[F] {
+)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends PureHandle[F] {
 
   def getLines: Iterator[String] =
     Source.fromFile(this.handle).getLines()
@@ -112,13 +112,13 @@ final case class FSFile[F[_]](
     }.flatten
 
   protected case class TransientCompressedFile(
-    private val handle: FSFile[F], private val algo: CompressionAlgorithm,
+    private val handle: FileHandle[F], private val algo: CompressionAlgorithm,
   ) {
 
     private val compressor: ByteArrayOutputStream => CompressorOutputStream =
       CompressionUtils.getCompressor(algo)
 
-    def writeTo(targetPath: String): F[FSFile[F]] =
+    def writeTo(targetPath: String): F[FileHandle[F]] =
       handle.getAbsolutePath.flatMap(path =>
         S.delay {
           val targetFile = new File(targetPath)
@@ -130,8 +130,8 @@ final case class FSFile[F[_]](
                 _.write(bos.toByteArray)
               }
             }.flatten *>
-            FSFile.fromFile[F](targetFile)
-          }.flatten.fold(E.raiseError[FSFile[F]], S.pure)
+            FileHandle.fromFile[F](targetFile)
+          }.flatten.fold(E.raiseError[FileHandle[F]], S.pure)
         }.flatten
       )
 
@@ -153,14 +153,14 @@ final case class FSFile[F[_]](
     TransientCompressedFile(this, _)
 
   protected case class TransientDecompressedFile(
-    private val handle: FSFile[F], private val algo: CompressionAlgorithm,
+    private val handle: FileHandle[F], private val algo: CompressionAlgorithm,
   ) {
 
     private val decompressor: BufferedInputStream => CompressorInputStream =
       DecompressionUtils.getDecompressor(algo)
 
     // TODO: improve this very inefficient method
-    def writeTo(destinationPath: String): F[FSFile[F]] =
+    def writeTo(destinationPath: String): F[FileHandle[F]] =
       S.delay {
         val bis = new BufferedInputStream(new FileInputStream(handle.toJavaFile))
         val inputStream = decompressor(bis)
@@ -168,7 +168,7 @@ final case class FSFile[F[_]](
         val destinationFile = new File(destinationPath)
         Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
           _.write(bufferedSrc.iter.toArray.map(_.toByte))
-        }.fold(E.raiseError[FSFile[F]], _ => S.pure(FSFile(destinationFile)))
+        }.fold(E.raiseError[FileHandle[F]], _ => S.pure(FileHandle(destinationFile)))
       }.flatten
   }
 
@@ -178,36 +178,36 @@ final case class FSFile[F[_]](
   def toJavaFile: File = this.handle
 }
 
-object FSFile {
+object FileHandle {
 
-  def createAt[F[_]](filePath: String)(implicit S: Sync[F]): F[FSFile[F]] =
+  def createAt[F[_]](filePath: String)(implicit S: Sync[F]): F[FileHandle[F]] =
     S.delay {
       val file = new File(filePath)
       if (!file.exists) {
         file.getParentFile.mkdirs
         file.createNewFile
       }
-      FSFile(file)
+      FileHandle(file)
     }
 
   def fromPath[F[_]](filePath: String)
-                    (implicit S: Sync[F], E: MonadError[F, Throwable]): F[FSFile[F]] =
+                    (implicit S: Sync[F], E: MonadError[F, Throwable]): F[FileHandle[F]] =
     S.delay {
       val file = new File(filePath)
-      if (file.exists && file.isFile) S.pure(FSFile(file))
-      else E.raiseError[FSFile[F]](new FileNotFoundException)
+      if (file.exists && file.isFile) S.pure(FileHandle(file))
+      else E.raiseError[FileHandle[F]](new FileNotFoundException)
     }.flatten
 
-  def fromPathOrCreate[F[_]](filePath: String)(implicit S: Sync[F]): F[FSFile[F]] =
+  def fromPathOrCreate[F[_]](filePath: String)(implicit S: Sync[F]): F[FileHandle[F]] =
     S.delay {
       val file = new File(filePath)
-      if (file.exists && file.isFile) S.pure(FSFile(file))
+      if (file.exists && file.isFile) S.pure(FileHandle(file))
       else this.createAt(filePath)
     }.flatten
 
-  def fromFile[F[_]](file: File)(implicit S: Sync[F]): Try[FSFile[F]] =
+  def fromFile[F[_]](file: File)(implicit S: Sync[F]): Try[FileHandle[F]] =
     Try { assert(file.exists && file.isFile) }
-      .map(_ => FSFile(file))
+      .map(_ => FileHandle(file))
 
   def existsAt[F[_]](path: String)(implicit S: Sync[F]): F[Boolean] =
     S.delay {
@@ -216,9 +216,9 @@ object FSFile {
     }
 }
 
-final case class FSDirectory[F[_]](
+final case class DirectoryHandle[F[_]](
   private val handle: File,
-)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends FSObject[F] {
+)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends PureHandle[F] {
 
   def renameTo(destination: String)(implicit S: Sync[F], E: MonadError[F, Throwable]): F[Unit] =
     S.delay {
@@ -235,27 +235,27 @@ final case class FSDirectory[F[_]](
   def delete: F[Unit] =
     this.getContents.flatMap(_.traverse(_.delete)).map(_.combineAll) *> this.deleteIfEmpty
 
-  def getContents: F[ArraySeq[FSObject[F]]] =
+  def getContents: F[ArraySeq[PureHandle[F]]] =
     S.delay {
       handle.listFiles.map({
-        case f if f.isFile => FSFile.fromFile(f)
-        case d             => FSDirectory.fromFile(d)
+        case f if f.isFile => FileHandle.fromFile(f)
+        case d             => DirectoryHandle.fromFile(d)
       }).flatMap(_.toOption).to(ArraySeq)
     }
 
-  def getDirectoriesBelow: F[ArraySeq[FSDirectory[F]]] =
-    this.getContents.map(_ collect { case d: FSDirectory[F] => d })
+  def getDirectoriesBelow: F[ArraySeq[DirectoryHandle[F]]] =
+    this.getContents.map(_ collect { case d: DirectoryHandle[F] => d })
 
-  def getFilesBelow: F[ArraySeq[FSFile[F]]] =
-    this.getContents.map(_ collect { case f: FSFile[F] => f })
+  def getFilesBelow: F[ArraySeq[FileHandle[F]]] =
+    this.getContents.map(_ collect { case f: FileHandle[F] => f })
 
-  def forEachFileBelow[A](cb: FSFile[F] => F[A])
+  def forEachFileBelow[A](cb: FileHandle[F] => F[A])
                          (implicit T: ClassTag[A]): F[ArraySeq[A]] = {
 
-    def forEachFileIn(fsObj: FSObject[F]): F[ArraySeq[A]] =
+    def forEachFileIn(fsObj: PureHandle[F]): F[ArraySeq[A]] =
       fsObj match {
-        case f: FSFile[F] => cb(f).map(ArraySeq(_))
-        case d: FSDirectory[F] =>
+        case f: FileHandle[F] => cb(f).map(ArraySeq(_))
+        case d: DirectoryHandle[F] =>
           d
             .getContents
             .flatMap(
@@ -280,36 +280,36 @@ final case class FSDirectory[F[_]](
   def toJavaFile: File = this.handle
 }
 
-object FSDirectory {
+object DirectoryHandle {
 
-  def createAt[F[_]](directoryPath: String)(implicit S: Sync[F]): F[FSDirectory[F]] =
+  def createAt[F[_]](directoryPath: String)(implicit S: Sync[F]): F[DirectoryHandle[F]] =
     S.delay {
       val directory = new File(directoryPath)
       if (!directory.exists) {
         directory.getParentFile.mkdirs
         directory.mkdir
       }
-      FSDirectory(directory)
+      DirectoryHandle(directory)
     }
 
   def fromPath[F[_]](directoryPath: String)
-                    (implicit S: Sync[F], E: MonadError[F, Throwable]): F[FSDirectory[F]] =
+                    (implicit S: Sync[F], E: MonadError[F, Throwable]): F[DirectoryHandle[F]] =
     S.delay {
       val directory = new File(directoryPath)
-      if (directory.exists && directory.isDirectory) S.pure(FSDirectory(directory))
-      else E.raiseError[FSDirectory[F]](new FileNotFoundException)
+      if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
+      else E.raiseError[DirectoryHandle[F]](new FileNotFoundException)
     }.flatten
 
-  def fromPathOrCreate[F[_]](directoryPath: String)(implicit S: Sync[F]): F[FSDirectory[F]] =
+  def fromPathOrCreate[F[_]](directoryPath: String)(implicit S: Sync[F]): F[DirectoryHandle[F]] =
     S.delay {
       val directory = new File(directoryPath)
-      if (directory.exists && directory.isDirectory) S.pure(FSDirectory(directory))
+      if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
       else this.createAt(directoryPath)
     }.flatten
 
-  def fromFile[F[_]](directory: File)(implicit S: Sync[F]): Try[FSDirectory[F]] =
+  def fromFile[F[_]](directory: File)(implicit S: Sync[F]): Try[DirectoryHandle[F]] =
     Try { assert(directory.exists && directory.isDirectory) }
-      .map(_ => FSDirectory(directory))
+      .map(_ => DirectoryHandle(directory))
 
   def existsAt[F[_]](path: String)(implicit S: Sync[F]): F[Boolean] =
     S.delay {
