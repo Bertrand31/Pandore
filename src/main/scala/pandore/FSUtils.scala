@@ -1,4 +1,4 @@
-package fsutils
+package pandore
 
 import java.io.{
   BufferedOutputStream, BufferedInputStream, ByteArrayOutputStream, File,
@@ -31,7 +31,7 @@ final case class FSFile[F[_]](
 )(implicit private val S: Sync[F], private val E: MonadError[F, Throwable]) extends FSObject[F] {
 
   def getLines: Iterator[String] =
-    Source.fromFile(this.handle).getLines
+    Source.fromFile(this.handle).getLines()
 
   def copyTo(destination: String): F[Unit] =
     this.getAbsolutePath.flatMap(path =>
@@ -233,7 +233,7 @@ final case class FSDirectory[F[_]](
     S.delay { handle.delete; () }
 
   def delete: F[Unit] =
-    this.getContents.flatMap(_.traverse(_.delete).map(_.combineAll)) *> this.deleteIfEmpty
+    this.getContents.flatMap(_.traverse(_.delete)).map(_.combineAll) *> this.deleteIfEmpty
 
   def getContents: F[ArraySeq[FSObject[F]]] =
     S.delay {
@@ -249,30 +249,30 @@ final case class FSDirectory[F[_]](
   def getFilesBelow: F[ArraySeq[FSFile[F]]] =
     this.getContents.map(_ collect { case f: FSFile[F] => f })
 
-  def forEachFileBelow[A](cb: (String, FSFile[F]) => F[A])
+  def forEachFileBelow[A](cb: FSFile[F] => F[A])
                          (implicit T: ClassTag[A]): F[ArraySeq[A]] = {
 
-    def forEachFileIn(path: String, fsObj: FSObject[F]): F[ArraySeq[A]] =
+    def forEachFileIn(fsObj: FSObject[F]): F[ArraySeq[A]] =
       fsObj match {
-        case f: FSFile[F] => cb(path, f).map(ArraySeq(_))
+        case f: FSFile[F] => cb(f).map(ArraySeq(_))
         case d: FSDirectory[F] =>
           d
             .getContents
             .flatMap(
               _
-                .traverse(file => file.getAbsolutePath.flatMap(forEachFileIn(_, file)))
+                .traverse(forEachFileIn)
                 .map(_.flatten)
             )
       }
 
-      this.getAbsolutePath.flatMap(forEachFileIn(_, this))
+      forEachFileIn(this)
     }
 
   def size: F[Long] =
-    forEachFileBelow((_, f) => f.size).map(_.sum)
+    forEachFileBelow(_.size).map(_.sum)
 
   def getFilePathsBelow: F[ArraySeq[String]] =
-    forEachFileBelow((_, f) => f.getAbsolutePath)
+    forEachFileBelow(_.getAbsolutePath)
 
   def lastModified: F[Long] =
     S.delay { handle.lastModified }

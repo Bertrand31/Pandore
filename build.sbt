@@ -1,6 +1,6 @@
-scalaVersion := "2.13.2"
+scalaVersion := "2.13.3"
 
-name := "FSUtils"
+name := "Pandore"
 organization := "bertrand"
 version := "0.1"
 

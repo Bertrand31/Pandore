@@ -1,4 +1,4 @@
-package fsutils
+package pandore
 
 import java.io.{BufferedInputStream, ByteArrayOutputStream}
 import org.apache.commons.compress.compressors._

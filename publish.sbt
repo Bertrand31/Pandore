@@ -4,8 +4,8 @@ ThisBuild / organizationHomepage := Some(url("http://github.com/Bertrand31"))
 
 ThisBuild / scmInfo := Some(
   ScmInfo(
-    url("https://github.com/Bertrand31/FSUtils"),
-    "scm:git@github.com:Bertrand31/FSUtils.git"
+    url("https://github.com/Bertrand31/Pandore"),
+    "scm:git@github.com:Bertrand31/Pandore.git"
   )
 )
 ThisBuild / developers := List(
@@ -19,7 +19,7 @@ ThisBuild / developers := List(
 
 ThisBuild / description := "The functional files manipulation library Scala was missing"
 ThisBuild / licenses := List("Mozilla Public License 2.0" -> new URL("https://github.com/mozilla/openbadges-bakery/blob/master/LICENSE-MPL-2.0"))
-ThisBuild / homepage := Some(url("https://github.com/Bertrand31/FSUtils"))
+ThisBuild / homepage := Some(url("https://github.com/Bertrand31/Pandore"))
 
 // Remove all additional repository other than Maven Central from POM
 ThisBuild / pomIncludeRepository := { _ => false }

@@ -1,21 +1,13 @@
-# FS Utils
+# Pandore
 
-FS utils is a library that grew out of being tired of writing the same "File Utils" over and over in
-every Scala project I work on.
+Pandore is a (tool)box that aims to hide all the ailments and complexities of Java's file handling
+APIs and file compression/decompression from the ingenuous Functional Scala developper.
 
-Not only it is repetitive but it is extremely tedious. Java's file handling APIs, although
-very comprehensive and powerful, are painful to use and remember, especially when
-compression/decompression is involved.
+It does so by presenting a clean, coherent and fully functional interface, which acts as a one-stop
+for all file and directories-related operations.
 
-The goal of this library is mostly for me to write all of this once and for all, and being able to
-reuse it. As such, some things may be missing, and some others are strongly opinionated (for example
-the use of the IO monad).
-Also, because I am really no expert in Java there will definitely be room for improvements in some
-places.
-
-For all these reasons, everyone is welcome to contribute to this library to improve it, add
-functionalities, challenge some of its opinions (why not make it configurable such that the user can
-chose to have the side-effecting methods returns ZIO monads, or Futures, etc.).
+Everyone is welcome to contribute to this library to improve it, add functionalities or challenge
+some of its opinionated approaches.
 
 ## Overview
 
