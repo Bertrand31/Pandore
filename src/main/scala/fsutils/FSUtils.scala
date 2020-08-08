@@ -298,6 +298,14 @@ object FSDirectory {
       else E.raiseError[FSDirectory[F]](new FileNotFoundException)
     }.flatten
 
+  def fromPathOrCreate[F[_]](directoryPath: String)
+                            (implicit S: Sync[F]): F[FSDirectory[F]] =
+    S.delay {
+      val directory = new File(directoryPath)
+      if (directory.exists && directory.isDirectory) S.pure(FSDirectory(directory))
+      else this.createAt(directoryPath)
+    }.flatten
+
   def fromFile[F[_]](directory: File)(implicit S: Sync[F]): Try[FSDirectory[F]] =
     Try { assert(directory.exists && directory.isDirectory) }
       .map(_ => FSDirectory(directory))
