@@ -233,7 +233,7 @@ final case class FSDirectory[F[_]](
     S.delay { handle.delete; () }
 
   def delete: F[Unit] =
-    this.getContents.flatMap(_.traverse(_.delete).map(_.combineAll))
+    this.getContents.flatMap(_.traverse(_.delete).map(_.combineAll)) *> this.deleteIfEmpty
 
   def getContents: F[ArraySeq[FSObject[F]]] =
     S.delay {
