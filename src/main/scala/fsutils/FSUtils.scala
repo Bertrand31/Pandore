@@ -15,7 +15,7 @@ import CompressionAlgorithm.CompressionAlgorithm
 
 sealed trait FSObject[F[_]] {
 
-  def getAbsolutePath: String
+  def getAbsolutePath: F[String]
 
   def size: F[Long]
 
@@ -30,22 +30,26 @@ final case class FSFile[F[_]](
     Source.fromFile(this.handle).getLines
 
   def copyTo(destination: String): F[Unit] =
-    S.delay {
-      Files.copy(
-        Paths.get(this.getAbsolutePath),
-        Paths.get(destination),
-        StandardCopyOption.REPLACE_EXISTING,
-      )
-    }.map(_ => ())
+    this.getAbsolutePath.flatMap(path =>
+      S.delay {
+        Files.copy(
+          Paths.get(path),
+          Paths.get(destination),
+          StandardCopyOption.REPLACE_EXISTING,
+        )
+      }
+    ).map(_ => ())
 
   def moveTo(destination: String): F[Unit] =
-    S.delay {
-      Files.move(
-        Paths.get(this.getAbsolutePath),
-        Paths.get(destination),
-        StandardCopyOption.REPLACE_EXISTING,
-      )
-    }.map(_ => ())
+    this.getAbsolutePath.flatMap(path =>
+      S.delay {
+        Files.move(
+          Paths.get(path),
+          Paths.get(destination),
+          StandardCopyOption.REPLACE_EXISTING,
+        )
+      }
+    ).map(_ => ())
 
   def renameTo(destination: String): F[Unit] =
     S.delay {
@@ -54,8 +58,8 @@ final case class FSFile[F[_]](
       }.fold(E.raiseError[Unit], S.pure(_))
     }.flatten
 
-  def getAbsolutePath: String =
-    handle.getAbsolutePath
+  def getAbsolutePath: F[String] =
+    S.delay(handle.getAbsolutePath)
 
   def size: F[Long] =
     S.delay { handle.length }
@@ -94,30 +98,34 @@ final case class FSFile[F[_]](
       CompressionUtils.getCompressor(algo)
 
     def writeTo(targetPath: String): F[FSFile[F]] =
-      S.delay {
-        val targetFile = new File(targetPath)
-        val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
-        Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
-          Using(compressor(bos)) { compressed =>
-            compressed.write(byteArray)
-            Using(new BufferedOutputStream(new FileOutputStream(targetFile))) {
-              _.write(bos.toByteArray)
-            }
-          }.flatten *>
-          FSFile.fromFile[F](targetFile)
-        }.flatten.fold(E.raiseError[FSFile[F]], S.pure(_))
-      }.flatten
+      handle.getAbsolutePath.flatMap(path =>
+        S.delay {
+          val targetFile = new File(targetPath)
+          val byteArray = Files.readAllBytes(Paths.get(path))
+          Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
+            Using(compressor(bos)) { compressed =>
+              compressed.write(byteArray)
+              Using(new BufferedOutputStream(new FileOutputStream(targetFile))) {
+                _.write(bos.toByteArray)
+              }
+            }.flatten *>
+            FSFile.fromFile[F](targetFile)
+          }.flatten.fold(E.raiseError[FSFile[F]], S.pure(_))
+        }.flatten
+      )
 
     def toByteArray: F[Array[Byte]] =
-      S.delay {
-        val byteArray = Files.readAllBytes(Paths.get(handle.getAbsolutePath))
-        Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
-          Using(compressor(bos)) { compressed =>
-            compressed.write(byteArray)
-            bos.toByteArray
-          }
-        }.flatten.fold(E.raiseError[Array[Byte]], S.pure[Array[Byte]](_))
-      }.flatten
+      handle.getAbsolutePath.flatMap(path =>
+        S.delay {
+          val byteArray = Files.readAllBytes(Paths.get(path))
+          Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
+            Using(compressor(bos)) { compressed =>
+              compressed.write(byteArray)
+              bos.toByteArray
+            }
+          }.flatten.fold(E.raiseError[Array[Byte]], S.pure[Array[Byte]](_))
+        }.flatten
+      )
   }
 
   val compressWith: CompressionAlgorithm => TransientCompressedFile =
@@ -185,8 +193,8 @@ final case class FSDirectory[F[_]](
       }.fold(E.raiseError[Unit], S.pure(_))
     }.flatten
 
-  def getAbsolutePath: String =
-    handle.getAbsolutePath
+  def getAbsolutePath: F[String] =
+    S.delay { handle.getAbsolutePath }
 
   def delete: F[Unit] =
     S.delay { handle.delete }
@@ -220,12 +228,12 @@ final case class FSDirectory[F[_]](
             .flatMap(
               _
                 .toList
-                .traverse(file => forEachFileIn(file.getAbsolutePath, file))
+                .traverse(file => file.getAbsolutePath.flatMap(forEachFileIn(_, file)))
                 .map(_.flatten)
             )
       }
 
-      forEachFileIn(getAbsolutePath, this)
+      this.getAbsolutePath.flatMap(forEachFileIn(_, this))
     }
 
   def size: F[Long] =
