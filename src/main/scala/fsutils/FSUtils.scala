@@ -19,6 +19,8 @@ sealed trait FSObject[F[_]] {
 
   def size: F[Long]
 
+  def delete: F[Unit]
+
   def toJavaFile: File
 }
 
@@ -194,8 +196,7 @@ object FSFile {
       else E.raiseError[FSFile[F]](new FileNotFoundException)
     }.flatten
 
-  def fromPathOrCreate[F[_]](filePath: String)
-                            (implicit S: Sync[F]): F[FSFile[F]] =
+  def fromPathOrCreate[F[_]](filePath: String)(implicit S: Sync[F]): F[FSFile[F]] =
     S.delay {
       val file = new File(filePath)
       if (file.exists && file.isFile) S.pure(FSFile(file))
@@ -226,12 +227,11 @@ final case class FSDirectory[F[_]](
   def getAbsolutePath: F[String] =
     S.delay { handle.getAbsolutePath }
 
+  def deleteIfEmpty: F[Unit] =
+    S.delay { handle.delete; () }
+
   def delete: F[Unit] =
-    S.delay { handle.delete }
-      .flatMap(
-        if (_) S.unit
-        else E.raiseError(new RuntimeException(s"Could not delete ${handle.getPath}"))
-      )
+    this.getContents.flatMap(_.toList.traverse(_.delete).map(_.combineAll))
 
   def getContents: F[Array[FSObject[F]]] =
     S.delay {
@@ -298,8 +298,7 @@ object FSDirectory {
       else E.raiseError[FSDirectory[F]](new FileNotFoundException)
     }.flatten
 
-  def fromPathOrCreate[F[_]](directoryPath: String)
-                            (implicit S: Sync[F]): F[FSDirectory[F]] =
+  def fromPathOrCreate[F[_]](directoryPath: String)(implicit S: Sync[F]): F[FSDirectory[F]] =
     S.delay {
       val directory = new File(directoryPath)
       if (directory.exists && directory.isDirectory) S.pure(FSDirectory(directory))
