@@ -6,7 +6,9 @@ import java.io.{
 }
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import scala.util.{Try, Using}
+import scala.reflect.ClassTag
 import scala.io.Source
+import scala.collection.immutable.ArraySeq
 import cats.MonadError
 import cats.effect.Sync
 import cats.implicits._
@@ -231,33 +233,33 @@ final case class FSDirectory[F[_]](
     S.delay { handle.delete; () }
 
   def delete: F[Unit] =
-    this.getContents.flatMap(_.toList.traverse(_.delete).map(_.combineAll))
+    this.getContents.flatMap(_.traverse(_.delete).map(_.combineAll))
 
-  def getContents: F[Array[FSObject[F]]] =
+  def getContents: F[ArraySeq[FSObject[F]]] =
     S.delay {
       handle.listFiles.map({
         case f if f.isFile => FSFile.fromFile(f)
         case d             => FSDirectory.fromFile(d)
-      }).flatMap(_.toOption)
+      }).flatMap(_.toOption).to(ArraySeq)
     }
 
-  def getDirectoriesBelow: F[Array[FSDirectory[F]]] =
+  def getDirectoriesBelow: F[ArraySeq[FSDirectory[F]]] =
     this.getContents.map(_ collect { case d: FSDirectory[F] => d })
 
-  def getFilesBelow: F[Array[FSFile[F]]] =
+  def getFilesBelow: F[ArraySeq[FSFile[F]]] =
     this.getContents.map(_ collect { case f: FSFile[F] => f })
 
-  def forEachFileBelow[A](cb: (String, FSFile[F]) => F[A]): F[List[A]] = {
+  def forEachFileBelow[A](cb: (String, FSFile[F]) => F[A])
+                         (implicit T: ClassTag[A]): F[ArraySeq[A]] = {
 
-    def forEachFileIn(path: String, fsObj: FSObject[F]): F[List[A]] =
+    def forEachFileIn(path: String, fsObj: FSObject[F]): F[ArraySeq[A]] =
       fsObj match {
-        case f: FSFile[F] => cb(path, f).map(List(_))
+        case f: FSFile[F] => cb(path, f).map(ArraySeq(_))
         case d: FSDirectory[F] =>
           d
             .getContents
             .flatMap(
               _
-                .toList
                 .traverse(file => file.getAbsolutePath.flatMap(forEachFileIn(_, file)))
                 .map(_.flatten)
             )
@@ -269,7 +271,7 @@ final case class FSDirectory[F[_]](
   def size: F[Long] =
     forEachFileBelow((_, f) => f.size).map(_.sum)
 
-  def getFilePathsBelow: F[List[String]] =
+  def getFilePathsBelow: F[ArraySeq[String]] =
     forEachFileBelow((_, f) => f.getAbsolutePath)
 
   def lastModified: F[Long] =
