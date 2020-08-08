@@ -194,6 +194,14 @@ object FSFile {
       else E.raiseError[FSFile[F]](new FileNotFoundException)
     }.flatten
 
+  def fromPathOrCreate[F[_]](filePath: String)
+                            (implicit S: Sync[F]): F[FSFile[F]] =
+    S.delay {
+      val file = new File(filePath)
+      if (file.exists && file.isFile) S.pure(FSFile(file))
+      else this.createAt(filePath)
+    }.flatten
+
   def fromFile[F[_]](file: File)(implicit S: Sync[F]): Try[FSFile[F]] =
     Try { assert(file.exists && file.isFile) }
       .map(_ => FSFile(file))
