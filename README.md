@@ -47,7 +47,7 @@ for {
   file             <- FileHandle.fromPath[IO]("/x/y/z.txt.snappy")
   decompressedFile <- file.decompressFrom(CompressionAlgorithm.SNAPPY).writeTo("/x/y/z.txt")
   compressedFile   <- decompressedFile.compressTo(CompressionAlgorithm.ZSTANDARD).writeTo("/x/y/z.zstd")
-} yield decompressedFile
+} yield compressedFile
 ```
 
 If you ever were to decide to open Pandore's box, you can do so by calling the `.toJavaFile`
