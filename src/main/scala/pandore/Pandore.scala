@@ -206,6 +206,12 @@ object FileHandle {
       else E.raiseError[FileHandle[F]](new FileNotFoundException)
     }.flatten
 
+  def fromFileOrCreate[F[+_]](file: File)(implicit S: Sync[F]): F[FileHandle[F]] =
+    S.delay {
+      if (file.exists && file.isFile) S.pure(FileHandle(file))
+      else this.createAt(file.getAbsolutePath)
+    }.flatten
+
   def existsAt[F[+_]](path: String)(implicit S: Sync[F]): F[Boolean] =
     S.delay {
       val handle = new File(path)
