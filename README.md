@@ -28,7 +28,7 @@ for {
 
 ```scala
 import cats.effect.IO
-import fsutils._
+import fsutils.{DirectoryHandle, FileHandle}
 
 for {
   dir         <- DirectoryHandle.fromFile[IO](new File("/foo/bar"))
@@ -41,7 +41,7 @@ for {
 
 ```scala
 import cats.effect.IO
-import fsutils._
+import fsutils.{DirectoryHandle, FileHandle}
 
 for {
   file             <- FileHandle.fromPath[IO]("/x/y/z.txt.snappy")
