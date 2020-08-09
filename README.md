@@ -18,12 +18,12 @@ import cats.effect.IO
 import fsutils.{DirectoryHandle, FileHandle}
 
 for {
-  file     <- FileHandle.createAt[IO]("/my/new/file.csv")
-  _        <- file.writeLinesProgressively(Iterator("foo", "bar", "bar"))
-  fileSize <- file.size
-  _        <- logger.debug(s"Successfuly wrote a $fileSize bytes file")
-  _        <- file.compressWith(CompressionAlgorithm.ZSTANDARD).writeTo("/x/y/file.csv.zstd")
-} yield ()
+  file       <- FileHandle.createAt[IO]("/my/new/file.csv")
+  _          <- file.writeLinesProgressively(Iterator("foo", "bar", "bar"))
+  fileSize   <- file.size
+  _          <- logger.debug(s"Successfuly wrote a $fileSize bytes file")
+  compressed <- file.compressWith(CompressionAlgorithm.ZSTANDARD).writeTo("/x/y/file.csv.zstd")
+} yield compressed
 ```
 
 ```scala
