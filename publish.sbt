@@ -1,5 +1,5 @@
-ThisBuild / organization := "com.bertrandjunqua"
-ThisBuild / organizationName := "bertrandjunqua"
+ThisBuild / organization := "io.github.bertrand31"
+ThisBuild / organizationName := "bertrand31"
 ThisBuild / organizationHomepage := Some(url("http://github.com/Bertrand31"))
 
 ThisBuild / scmInfo := Some(
@@ -23,9 +23,5 @@ ThisBuild / homepage := Some(url("https://github.com/Bertrand31/Pandore"))
 
 // Remove all additional repository other than Maven Central from POM
 ThisBuild / pomIncludeRepository := { _ => false }
-ThisBuild / publishTo := {
-  val nexus = "https://oss.sonatype.org/"
-  if (isSnapshot.value) Some("snapshots" at nexus + "content/repositories/snapshots")
-  else Some("releases" at nexus + "service/local/staging/deploy/maven2")
-}
+publishTo := Some("Sonatype Snapshots Nexus" at "https://oss.sonatype.org/content/repositories/snapshots")
 ThisBuild / publishMavenStyle := true
