@@ -9,7 +9,7 @@ libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-core" % "2.2.0-RC2",
   "org.typelevel" %% "cats-effect" % "2.1.4",
   "org.apache.commons" % "commons-compress" % "1.20",
-  "org.scalatest" %% "scalatest" % "3.0.8" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.0" % Test,
 )
 
 scalacOptions ++= Seq(
