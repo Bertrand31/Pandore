@@ -31,7 +31,7 @@ import cats.effect.IO
 import fsutils._
 
 for {
-  dir         <- DirectoryHandle.fromFile[IO](new File("/foo/bar")
+  dir         <- DirectoryHandle.fromFile[IO](new File("/foo/bar"))
   contentSize <- dir.size
   _           <- dir.forEachFileBelow(uploadToS3)
   _           <- logger.debug(s"Uploaded $contentSize bytes to S3")
