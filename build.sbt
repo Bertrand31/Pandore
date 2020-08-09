@@ -4,6 +4,9 @@ name := "Pandore"
 organization := "bertrand"
 version := "0.1"
 
+coverageEnabled := true
+coverageMinimum := 80
+coverageFailOnMinimum := true
 
 libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-core" % "2.2.0-RC2",
