@@ -9,11 +9,8 @@ class ArtemisSpec extends AnyFlatSpec {
 
   val path = "/tmp/test.txt"
 
-  def withNonExisting(testFun: File => Any): Any = {
-    val sampleFile = new File(path)
-    if (sampleFile.exists) sampleFile.delete()
-    testFun(sampleFile)
-  }
+  def withNonExisting(testFun: File => Any): Any =
+    testFun(new File(path))
 
   it should "fail to create a file handle from a non-existing file" in withNonExisting { sampleFile =>
     val res = FileHandle.fromFile[IO](sampleFile).attempt.unsafeRunSync()
@@ -56,5 +53,29 @@ class ArtemisSpec extends AnyFlatSpec {
   it should "return true when a file exists at that path" in withExisting { sampleFile =>
 
     assert(FileHandle.existsAt[IO](sampleFile.getAbsolutePath).unsafeRunSync())
+  }
+
+  behavior of "the writeLinesProgressively method"
+
+  def withEmptyFile(testFun: FileHandle[IO] => Any): Any = {
+    val sampleFile = new File(path)
+    sampleFile.createNewFile()
+    testFun(FileHandle.fromFile[IO](sampleFile).unsafeRunSync())
+    sampleFile.delete()
+  }
+
+  it should "write an sequence of strings to a file" in withEmptyFile { emptyFile =>
+    val data = (0 to 100).map(i => s"This is the line N°$i")
+    emptyFile.writeLinesProgressively(data).unsafeRunSync()
+    assert(emptyFile.getLines.toIndexedSeq === data)
+  }
+
+  behavior of "the writeByteLines method"
+
+  it should "write lines of raw bytes to a file" in withEmptyFile { emptyFile =>
+
+    val data = (2 to 2).map(i => scala.util.Random.shuffle((0 to i).map(_.toByte)).toArray).toArray
+    emptyFile.writeByteLines(data).unsafeRunSync()
+    assert(emptyFile.getLines.map(_.toCharArray.map(_.toByte)).toArray === data)
   }
 }

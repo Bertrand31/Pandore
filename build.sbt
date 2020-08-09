@@ -33,5 +33,7 @@ credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
 
 publishTo := Some("Sonatype Snapshots Nexus" at "https://oss.sonatype.org/content/repositories/snapshots")
 
+parallelExecution in Test := false
+
 // Test suite settings
 fork in Test := true

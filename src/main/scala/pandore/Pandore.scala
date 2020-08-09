@@ -102,10 +102,11 @@ final case class FileHandle[F[+_]](
       }.fold(E.raiseError[Unit], S.pure)
     }.flatten
 
-  def writeLinesProgressively(lines: => Iterator[_], chunkSize: Int = 10000): F[Unit] =
+  def writeLinesProgressively(lines: => IterableOnce[_], chunkSize: Int = 10000): F[Unit] =
     S.delay {
       Using(new FileWriter(handle))(writer =>
         lines
+          .iterator
           .sliding(chunkSize, chunkSize)
           .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
       ).fold(E.raiseError[Unit], S.pure)
