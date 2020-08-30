@@ -26,9 +26,10 @@ sealed trait PureHandle[F[+_]] {
   def toJavaFile: File
 }
 
-final case class FileHandle[F[+_]](
-  private val handle: File,
-)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable], C: Concurrent[F], P: Parallel[F]) extends PureHandle[F] {
+final case class FileHandle[F[+_]](private val handle: File)(
+  implicit private val S: Sync[F], private val E: MonadError[F, Throwable],
+  private val C: Concurrent[F], private val P: Parallel[F],
+) extends PureHandle[F] {
 
   def getLines: Iterator[String] =
     Source.fromFile(this.handle).getLines()
@@ -41,8 +42,7 @@ final case class FileHandle[F[+_]](
           Paths.get(destination),
           StandardCopyOption.REPLACE_EXISTING,
         )
-        ()
-      }
+      }.void
     )
 
   def moveTo(destination: String): F[Unit] =
@@ -53,15 +53,14 @@ final case class FileHandle[F[+_]](
           Paths.get(destination),
           StandardCopyOption.REPLACE_EXISTING,
         )
-        ()
-      }
+      }.void
     )
 
   def renameTo(destination: String): F[Unit] =
     S.delay {
       Try {
         assert(this.handle.renameTo(new File(destination)))
-      }.fold(E.raiseError[Unit], S.pure)
+      }.fold(E.raiseError, S.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
@@ -99,7 +98,7 @@ final case class FileHandle[F[+_]](
     S.delay {
       Using(new BufferedOutputStream(new FileOutputStream(handle, true))) { bos =>
         data.foreach(line => bos.write(line :+ NewLineByte))
-      }.fold(E.raiseError[Unit], S.pure)
+      }.fold(E.raiseError, S.pure)
     }.flatten
 
   def writeLinesProgressively(lines: => IterableOnce[_], chunkSize: Int = 10000): F[Unit] =
@@ -109,7 +108,7 @@ final case class FileHandle[F[+_]](
           .iterator
           .sliding(chunkSize, chunkSize)
           .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
-      ).fold(E.raiseError[Unit], S.pure)
+      ).fold(E.raiseError, S.pure)
     }.flatten
 
   protected case class TransientCompressedFile(
@@ -131,7 +130,7 @@ final case class FileHandle[F[+_]](
                 _.write(bos.toByteArray)
               }
             }.flatten
-          }.flatten.fold(E.raiseError[FileHandle[F]], _ => FileHandle.fromFile[F](targetFile))
+          }.flatten.fold(E.raiseError, _ => FileHandle.fromFile(targetFile))
         }.flatten
       )
 
@@ -144,7 +143,7 @@ final case class FileHandle[F[+_]](
               compressed.write(byteArray)
               bos.toByteArray
             }
-          }.flatten.fold(E.raiseError[Array[Byte]], S.pure)
+          }.flatten.fold(E.raiseError, S.pure)
         }.flatten
       )
   }
@@ -168,7 +167,7 @@ final case class FileHandle[F[+_]](
         val destinationFile = new File(destinationPath)
         Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
           _.write(bufferedSrc.iter.toArray.map(_.toByte))
-        }.fold(E.raiseError[FileHandle[F]], _ => S.pure(FileHandle(destinationFile)))
+        }.fold(E.raiseError, _ => S.pure(FileHandle(destinationFile)))
       }.flatten
   }
 
@@ -208,7 +207,7 @@ object FileHandle {
   ): F[FileHandle[F]] =
     S.delay {
       if (file.exists && file.isFile) S.pure(FileHandle(file))
-      else E.raiseError[FileHandle[F]](new FileNotFoundException)
+      else E.raiseError(new FileNotFoundException)
     }.flatten
 
   def fromFileOrCreate[F[+_]](file: File)
@@ -225,14 +224,15 @@ object FileHandle {
     }
 }
 
-final case class DirectoryHandle[F[+_]](
-  private val handle: File,
-)(implicit private val S: Sync[F], private val E: MonadError[F, Throwable], C: Concurrent[F], P: Parallel[F]) extends PureHandle[F] {
+final case class DirectoryHandle[F[+_]](private val handle: File)(
+  implicit private val S: Sync[F], private val E: MonadError[F, Throwable],
+  private val C: Concurrent[F], private val P: Parallel[F],
+) extends PureHandle[F] {
 
-  def renameTo(destination: String)(implicit S: Sync[F], E: MonadError[F, Throwable]): F[Unit] =
+  def renameTo(destination: String): F[Unit] =
     S.delay {
       Try { assert(this.handle.renameTo(new File(destination))) }
-        .fold(E.raiseError[Unit], S.pure)
+        .fold(E.raiseError, S.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
@@ -247,8 +247,8 @@ final case class DirectoryHandle[F[+_]](
   def getContents: F[ArraySeq[PureHandle[F]]] =
     S.delay {
       handle.listFiles.to(ArraySeq).traverse({
-        case f if f.isFile => FileHandle.fromFile[F](f)
-        case d             => DirectoryHandle.fromFile[F](d)
+        case f if f.isFile => FileHandle.fromFile(f)
+        case d             => DirectoryHandle.fromFile(d)
       })
     }.flatten
 
@@ -259,7 +259,7 @@ final case class DirectoryHandle[F[+_]](
     this.getContents.map(_ collect { case f: FileHandle[F] => f })
 
   def forEachFileBelow[A](cb: FileHandle[F] => F[A], maxConcurrency: Int = 1000)
-                      (implicit C: Concurrent[F], P: Parallel[F], T: ClassTag[A]): F[ArraySeq[A]] =
+                      (implicit T: ClassTag[A]): F[ArraySeq[A]] =
     Semaphore[F](maxConcurrency).flatMap { semaphore =>
       val throttledCallback = RateLimiting.throttle(semaphore, cb)
 
@@ -304,7 +304,7 @@ object DirectoryHandle {
     S.delay {
       val directory = new File(directoryPath)
       if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
-      else E.raiseError[DirectoryHandle[F]](new FileNotFoundException)
+      else E.raiseError(new FileNotFoundException)
     }.flatten
 
   def fromPathOrCreate[F[+_]](directoryPath: String)(
@@ -321,7 +321,7 @@ object DirectoryHandle {
   ): F[DirectoryHandle[F]] =
     S.delay {
       if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
-      else E.raiseError[DirectoryHandle[F]](new FileNotFoundException)
+      else E.raiseError(new FileNotFoundException)
     }.flatten
 
   def existsAt[F[+_]](path: String)(implicit S: Sync[F]): F[Boolean] =
