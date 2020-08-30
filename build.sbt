@@ -1,7 +1,7 @@
 scalaVersion := "2.13.3"
 
 name := "Pandore"
-organization := "bertrand"
+organization := "com.github.bertrand31"
 version := "0.1"
 
 coverageEnabled := true
