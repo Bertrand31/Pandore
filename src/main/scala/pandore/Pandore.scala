@@ -264,16 +264,10 @@ final case class DirectoryHandle[F[+_]](
       val throttledCallback = RateLimiting.throttle(semaphore, cb)
 
       lazy val throttledExplore: PureHandle[F] => F[ArraySeq[A]] =
-        RateLimiting.throttle(semaphore, (handle: PureHandle[F]) =>
-          handle match {
-            case f: FileHandle[F] =>
-              throttledCallback(f).map(ArraySeq(_))
-            case d: DirectoryHandle[F] =>
-              d
-                .getContents
-                .flatMap(_.parFlatTraverse(throttledExplore))
-          }
-        )
+        RateLimiting.throttle(semaphore, {
+          case f: FileHandle[F]      => throttledCallback(f).map(ArraySeq(_))
+          case d: DirectoryHandle[F] => d.getContents >>= (_.parFlatTraverse(throttledExplore))
+        })
 
       throttledExplore(this)
     }
