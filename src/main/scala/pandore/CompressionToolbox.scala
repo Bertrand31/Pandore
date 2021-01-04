@@ -22,32 +22,32 @@ import CompressionAlgorithm._
 
 object CompressionUtils {
 
-  def getCompressor(algo: CompressionAlgorithm): ByteArrayOutputStream => CompressorOutputStream =
-    algo match {
-      case BZ2       => new BZip2CompressorOutputStream(_)
+  val getCompressor: CompressionAlgorithm => (ByteArrayOutputStream => CompressorOutputStream) =
+    _ match {
       case DEFLATE   => new DeflateCompressorOutputStream(_)
+      case BZ2       => new BZip2CompressorOutputStream(_)
       case GZ        => new GzipCompressorOutputStream(_)
-      case LZMA      => new LZMACompressorOutputStream(_)
-      case LZ4       => new FramedLZ4CompressorOutputStream(_)
       case PACK200   => new Pack200CompressorOutputStream(_)
-      case SNAPPY    => new FramedSnappyCompressorOutputStream(_)
       case XZ        => new XZCompressorOutputStream(_)
       case ZSTANDARD => new ZstdCompressorOutputStream(_, 8)
+      case LZMA      => new LZMACompressorOutputStream(_)
+      case LZ4       => new FramedLZ4CompressorOutputStream(_)
+      case SNAPPY    => new FramedSnappyCompressorOutputStream(_)
     }
 }
 
 object DecompressionUtils {
 
-  def getDecompressor(algo: CompressionAlgorithm): BufferedInputStream => CompressorInputStream =
-    algo match {
-      case BZ2       => new BZip2CompressorInputStream(_)
+  val getDecompressor: CompressionAlgorithm => (BufferedInputStream => CompressorInputStream) =
+    _ match {
       case DEFLATE   => new DeflateCompressorInputStream(_)
+      case BZ2       => new BZip2CompressorInputStream(_)
       case GZ        => new GzipCompressorInputStream(_)
-      case LZMA      => new LZMACompressorInputStream(_)
-      case LZ4       => new FramedLZ4CompressorInputStream(_)
       case PACK200   => new Pack200CompressorInputStream(_)
-      case SNAPPY    => new FramedSnappyCompressorInputStream(_)
       case XZ        => new XZCompressorInputStream(_)
       case ZSTANDARD => new ZstdCompressorInputStream(_)
+      case LZMA      => new LZMACompressorInputStream(_)
+      case LZ4       => new FramedLZ4CompressorInputStream(_)
+      case SNAPPY    => new FramedSnappyCompressorInputStream(_)
     }
 }

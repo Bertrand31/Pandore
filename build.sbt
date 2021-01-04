@@ -1,4 +1,4 @@
-scalaVersion := "2.13.3"
+scalaVersion := "2.13.4"
 
 name := "Pandore"
 organization := "com.github.bertrand31"
@@ -9,10 +9,10 @@ coverageMinimum := 80
 coverageFailOnMinimum := true
 
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-core" % "2.2.0-RC2",
-  "org.typelevel" %% "cats-effect" % "2.1.4",
+  "org.typelevel" %% "cats-core" % "2.3.1",
+  "org.typelevel" %% "cats-effect" % "3.0.0-M5",
   "org.apache.commons" % "commons-compress" % "1.20",
-  "org.scalatest" %% "scalatest" % "3.2.0" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.3" % Test,
 )
 
 scalacOptions ++= Seq(

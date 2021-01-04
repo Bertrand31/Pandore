@@ -1,6 +1,7 @@
 package pandore
 
-import cats.effect.{Concurrent, concurrent}, concurrent.Semaphore
+import cats.effect.Concurrent
+import cats.effect.std.Semaphore
 import cats.implicits._
 
 object RateLimiting {

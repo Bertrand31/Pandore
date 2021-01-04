@@ -9,8 +9,9 @@ import scala.util.{Try, Using}
 import scala.reflect.ClassTag
 import scala.io.Source
 import scala.collection.immutable.ArraySeq
-import cats.{MonadError, Parallel}
-import cats.effect.{Concurrent, concurrent, Sync}, concurrent.Semaphore
+import cats._
+import cats.effect.Async
+import cats.effect.std.Semaphore
 import cats.implicits._
 import org.apache.commons.compress.compressors.{CompressorOutputStream, CompressorInputStream}
 import CompressionAlgorithm.CompressionAlgorithm
@@ -27,8 +28,8 @@ sealed trait PureHandle[F[+_]] {
 }
 
 final case class FileHandle[F[+_]](private val handle: File)(
-  implicit private val S: Sync[F], private val E: MonadError[F, Throwable],
-  private val C: Concurrent[F], private val P: Parallel[F],
+  implicit private val A: Async[F],
+  private val E: MonadError[F, Throwable],
 ) extends PureHandle[F] {
 
   def getLines: Iterator[String] =
@@ -36,7 +37,7 @@ final case class FileHandle[F[+_]](private val handle: File)(
 
   def copyTo(destination: String): F[Unit] =
     this.getAbsolutePath.flatMap(path =>
-      S.delay {
+      A.delay {
         Files.copy(
           Paths.get(path),
           Paths.get(destination),
@@ -47,7 +48,7 @@ final case class FileHandle[F[+_]](private val handle: File)(
 
   def moveTo(destination: String): F[Unit] =
     this.getAbsolutePath.flatMap(path =>
-      S.delay {
+      A.delay {
         Files.move(
           Paths.get(path),
           Paths.get(destination),
@@ -57,58 +58,58 @@ final case class FileHandle[F[+_]](private val handle: File)(
     )
 
   def renameTo(destination: String): F[Unit] =
-    S.delay {
+    A.delay {
       Try {
         assert(this.handle.renameTo(new File(destination)))
-      }.fold(E.raiseError, S.pure)
+      }.fold(E.raiseError, A.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
-    S.delay { handle.getAbsolutePath }
+    A.delay { handle.getAbsolutePath }
 
   def size: F[Long] =
-    S.delay { handle.length }
+    A.delay { handle.length }
 
   def delete: F[Unit] =
-    S.delay { handle.delete }
+    A.delay { handle.delete }
       .flatMap(
-        if (_) S.unit
+        if (_) A.unit
         else E.raiseError(new RuntimeException(s"Could not delete ${handle.getPath}"))
       )
 
   def canRead: F[Boolean] =
-    S.delay { handle.canRead }
+    A.delay { handle.canRead }
 
   def canWrite: F[Boolean] =
-    S.delay { handle.canWrite }
+    A.delay { handle.canWrite }
 
   def canExecute: F[Boolean] =
-    S.delay { handle.canExecute }
+    A.delay { handle.canExecute }
 
   def isHidden: F[Boolean] =
-    S.delay { handle.isHidden }
+    A.delay { handle.isHidden }
 
   def lastModified: F[Long] =
-    S.delay { handle.lastModified }
+    A.delay { handle.lastModified }
 
   private val NewLine = '\n'
   private val NewLineByte = NewLine.toByte
 
   def writeByteLines(data: Array[Array[Byte]]): F[Unit] =
-    S.delay {
+    A.delay {
       Using(new BufferedOutputStream(new FileOutputStream(handle, true))) { bos =>
         data.foreach(line => bos.write(line :+ NewLineByte))
-      }.fold(E.raiseError, S.pure)
+      }.fold(E.raiseError, A.pure)
     }.flatten
 
   def writeLinesProgressively(lines: => IterableOnce[_], chunkSize: Int = 10000): F[Unit] =
-    S.delay {
+    A.delay {
       Using(new FileWriter(handle))(writer =>
         lines
           .iterator
           .sliding(chunkSize, chunkSize)
           .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
-      ).fold(E.raiseError, S.pure)
+      ).fold(E.raiseError, A.pure)
     }.flatten
 
   protected case class TransientCompressedFile(
@@ -120,7 +121,7 @@ final case class FileHandle[F[+_]](private val handle: File)(
 
     def writeTo(targetPath: String): F[FileHandle[F]] =
       handle.getAbsolutePath.flatMap(path =>
-        S.delay {
+        A.delay {
           val targetFile = new File(targetPath)
           val byteArray = Files.readAllBytes(Paths.get(path))
           Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
@@ -136,14 +137,14 @@ final case class FileHandle[F[+_]](private val handle: File)(
 
     def toByteArray: F[Array[Byte]] =
       handle.getAbsolutePath.flatMap(path =>
-        S.delay {
+        A.delay {
           val byteArray = Files.readAllBytes(Paths.get(path))
           Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
             Using(compressor(bos)) { compressed =>
               compressed.write(byteArray)
               bos.toByteArray
             }
-          }.flatten.fold(E.raiseError, S.pure)
+          }.flatten.fold(E.raiseError, A.pure)
         }.flatten
       )
   }
@@ -160,14 +161,14 @@ final case class FileHandle[F[+_]](private val handle: File)(
 
     // TODO: improve this very inefficient method
     def writeTo(destinationPath: String): F[FileHandle[F]] =
-      S.delay {
+      A.delay {
         val bis = new BufferedInputStream(new FileInputStream(handle.toJavaFile))
         val inputStream = decompressor(bis)
         val bufferedSrc  = scala.io.Source.fromInputStream(inputStream)
         val destinationFile = new File(destinationPath)
         Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
           _.write(bufferedSrc.iter.toArray.map(_.toByte))
-        }.fold(E.raiseError, _ => S.pure(FileHandle(destinationFile)))
+        }.fold(E.raiseError, _ => A.pure(FileHandle(destinationFile)))
       }.flatten
   }
 
@@ -179,9 +180,8 @@ final case class FileHandle[F[+_]](private val handle: File)(
 
 object FileHandle {
 
-  def createAt[F[+_]](filePath: String)
-                     (implicit S: Sync[F], C: Concurrent[F], P: Parallel[F]): F[FileHandle[F]] =
-    S.delay {
+  def createAt[F[+_]](filePath: String)(implicit A: Async[F]): F[FileHandle[F]] =
+    A.delay {
       val file = new File(filePath)
       if (!file.exists) {
         file.getParentFile.mkdirs
@@ -190,62 +190,59 @@ object FileHandle {
       FileHandle(file)
     }
 
-  def fromPath[F[+_]](filePath: String)
-                     (implicit S: Sync[F], C: Concurrent[F], P: Parallel[F]): F[FileHandle[F]] =
-    S.delay { this.fromFile(new File(filePath)) }.flatten
+  def fromPath[F[+_]](filePath: String)(implicit A: Async[F]): F[FileHandle[F]] =
+    this.fromFile(new File(filePath))
 
-  def fromPathOrCreate[F[+_]](filePath: String)
-                      (implicit S: Sync[F], C: Concurrent[F], P: Parallel[F]): F[FileHandle[F]] =
-    S.delay {
+  def fromPathOrCreate[F[+_]](filePath: String)(implicit A: Async[F]): F[FileHandle[F]] =
+    A.delay {
       val file = new File(filePath)
-      if (file.exists && file.isFile) S.pure(FileHandle(file))
+      if (file.exists && file.isFile) A.pure(FileHandle(file))
       else this.createAt(filePath)
     }.flatten
 
   def fromFile[F[+_]](file: File)(
-    implicit S: Sync[F], E: MonadError[F, Throwable], C: Concurrent[F], P: Parallel[F]
+    implicit A: Async[F], E: MonadError[F, Throwable]
   ): F[FileHandle[F]] =
-    S.delay {
-      if (file.exists && file.isFile) S.pure(FileHandle(file))
+    A.delay {
+      if (file.exists && file.isFile) A.pure(FileHandle(file))
       else E.raiseError(new FileNotFoundException)
     }.flatten
 
-  def fromFileOrCreate[F[+_]](file: File)
-                      (implicit S: Sync[F], C: Concurrent[F], P: Parallel[F]): F[FileHandle[F]] =
-    S.delay {
-      if (file.exists && file.isFile) S.pure(FileHandle(file))
+  def fromFileOrCreate[F[+_]](file: File)(implicit A: Async[F], P: Parallel[F]): F[FileHandle[F]] =
+    A.delay {
+      if (file.exists && file.isFile) A.pure(FileHandle(file))
       else this.createAt(file.getAbsolutePath)
     }.flatten
 
-  def existsAt[F[+_]](path: String)(implicit S: Sync[F]): F[Boolean] =
-    S.delay {
+  def existsAt[F[+_]](path: String)(implicit A: Async[F]): F[Boolean] =
+    A.delay {
       val handle = new File(path)
       handle.exists && handle.isFile
     }
 }
 
 final case class DirectoryHandle[F[+_]](private val handle: File)(
-  implicit private val S: Sync[F], private val E: MonadError[F, Throwable],
-  private val C: Concurrent[F], private val P: Parallel[F],
+  implicit private val A: Async[F], private val E: MonadError[F, Throwable],
+  private val P: Parallel[F],
 ) extends PureHandle[F] {
 
   def renameTo(destination: String): F[Unit] =
-    S.delay {
+    A.delay {
       Try { assert(this.handle.renameTo(new File(destination))) }
-        .fold(E.raiseError, S.pure)
+        .fold(E.raiseError, A.pure)
     }.flatten
 
   def getAbsolutePath: F[String] =
-    S.delay { handle.getAbsolutePath }
+    A.delay { handle.getAbsolutePath }
 
   def deleteIfEmpty: F[Unit] =
-    S.delay { handle.delete; () }
+    A.delay { handle.delete; () }
 
   def delete: F[Unit] =
     this.getContents.flatMap(_.traverse(_.delete)).map(_.combineAll) *> this.deleteIfEmpty
 
   def getContents: F[ArraySeq[PureHandle[F]]] =
-    S.delay {
+    A.delay {
       handle.listFiles.to(ArraySeq).traverse({
         case f if f.isFile => FileHandle.fromFile(f)
         case d             => DirectoryHandle.fromFile(d)
@@ -259,7 +256,7 @@ final case class DirectoryHandle[F[+_]](private val handle: File)(
     this.getContents.map(_ collect { case f: FileHandle[F] => f })
 
   def forEachFileBelow[A](cb: FileHandle[F] => F[A], maxConcurrency: Int = 1000)
-                      (implicit T: ClassTag[A]): F[ArraySeq[A]] =
+                         (implicit T: ClassTag[A]): F[ArraySeq[A]] =
     Semaphore[F](maxConcurrency).flatMap { semaphore =>
       val throttledCallback = RateLimiting.throttle(semaphore, cb)
 
@@ -279,18 +276,16 @@ final case class DirectoryHandle[F[+_]](private val handle: File)(
     forEachFileBelow(_.getAbsolutePath)
 
   def lastModified: F[Long] =
-    S.delay { handle.lastModified }
+    A.delay { handle.lastModified }
 
   def toJavaFile: File = this.handle
 }
 
 object DirectoryHandle {
 
-  def createAt[F[+_]](directoryPath: String)(
-    implicit S: Sync[F], C: Concurrent[F], P: Parallel[F]
-  ): F[DirectoryHandle[F]] =
-    S.delay {
-      val directory = new File(directoryPath)
+  def createAt[F[+_]](path: String)(implicit A: Async[F], P: Parallel[F]): F[DirectoryHandle[F]] =
+    A.delay {
+      val directory = new File(path)
       if (!directory.exists) {
         directory.getParentFile.mkdirs
         directory.mkdir
@@ -299,33 +294,33 @@ object DirectoryHandle {
     }
 
   def fromPath[F[+_]](directoryPath: String)(
-    implicit S: Sync[F], E: MonadError[F, Throwable], C: Concurrent[F], P: Parallel[F]
+    implicit A: Async[F], E: MonadError[F, Throwable], P: Parallel[F]
   ): F[DirectoryHandle[F]] =
-    S.delay {
+    A.delay {
       val directory = new File(directoryPath)
-      if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
+      if (directory.exists && directory.isDirectory) A.pure(DirectoryHandle(directory))
       else E.raiseError(new FileNotFoundException)
     }.flatten
 
   def fromPathOrCreate[F[+_]](directoryPath: String)(
-    implicit S: Sync[F], C: Concurrent[F], P: Parallel[F]
+    implicit A: Async[F], P: Parallel[F]
   ): F[DirectoryHandle[F]] =
-    S.delay {
+    A.delay {
       val directory = new File(directoryPath)
-      if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
+      if (directory.exists && directory.isDirectory) A.pure(DirectoryHandle(directory))
       else this.createAt(directoryPath)
     }.flatten
 
   def fromFile[F[+_]](directory: File)(
-    implicit S: Sync[F], E: MonadError[F, Throwable], C: Concurrent[F], P: Parallel[F]
+    implicit A: Async[F], E: MonadError[F, Throwable], P: Parallel[F]
   ): F[DirectoryHandle[F]] =
-    S.delay {
-      if (directory.exists && directory.isDirectory) S.pure(DirectoryHandle(directory))
+    A.delay {
+      if (directory.exists && directory.isDirectory) A.pure(DirectoryHandle(directory))
       else E.raiseError(new FileNotFoundException)
     }.flatten
 
-  def existsAt[F[+_]](path: String)(implicit S: Sync[F]): F[Boolean] =
-    S.delay {
+  def existsAt[F[+_]](path: String)(implicit A: Async[F]): F[Boolean] =
+    A.delay {
       val handle = new File(path)
       handle.exists && handle.isDirectory
     }
