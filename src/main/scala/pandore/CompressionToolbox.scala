@@ -22,7 +22,7 @@ import CompressionAlgorithm._
 
 object CompressionUtils {
 
-  val getCompressor: CompressionAlgorithm => (ByteArrayOutputStream => CompressorOutputStream) =
+  val getCompressor: CompressionAlgorithm => ByteArrayOutputStream => CompressorOutputStream =
     _ match {
       case DEFLATE   => new DeflateCompressorOutputStream(_)
       case BZ2       => new BZip2CompressorOutputStream(_)
@@ -38,7 +38,7 @@ object CompressionUtils {
 
 object DecompressionUtils {
 
-  val getDecompressor: CompressionAlgorithm => (BufferedInputStream => CompressorInputStream) =
+  val getDecompressor: CompressionAlgorithm => BufferedInputStream => CompressorInputStream =
     _ match {
       case DEFLATE   => new DeflateCompressorInputStream(_)
       case BZ2       => new BZip2CompressorInputStream(_)

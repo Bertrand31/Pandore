@@ -1,13 +1,14 @@
 import org.scalatest.flatspec.AnyFlatSpec
 import java.io.File
 import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import pandore._
 
-class ArtemisSpec extends AnyFlatSpec {
+class FileHandleSpec extends AnyFlatSpec {
 
   behavior of "the fromFile and fromPath constructor methods"
 
-  val path = "/tmp/test.txt"
+  private val path = "/tmp/test.txt"
 
   def withNonExisting(testFun: File => Any): Any =
     testFun(new File(path))
@@ -15,13 +16,13 @@ class ArtemisSpec extends AnyFlatSpec {
   it should "fail to create a file handle from a non-existing file" in withNonExisting { sampleFile =>
     val res = FileHandle.fromFile[IO](sampleFile).attempt.unsafeRunSync()
     assert(res.isLeft)
-    assert(res.swap.toOption.get.getClass.getCanonicalName === "java.io.FileNotFoundException")
+    assert(res.swap.toOption.get.isInstanceOf[java.io.FileNotFoundException])
   }
 
   it should "fail to create a file handle from a non-existing path" in withNonExisting { sampleFile =>
     val res = FileHandle.fromPath[IO](sampleFile.getAbsolutePath).attempt.unsafeRunSync()
     assert(res.isLeft)
-    assert(res.swap.toOption.get.getClass.getCanonicalName === "java.io.FileNotFoundException")
+    assert(res.swap.toOption.get.isInstanceOf[java.io.FileNotFoundException])
   }
 
   def withExisting(testFun: File => Any): Any = {
