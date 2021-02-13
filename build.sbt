@@ -2,11 +2,7 @@ scalaVersion := "2.13.4"
 
 name := "Pandore"
 organization := "com.github.bertrand31"
-version := "0.1"
-
-coverageEnabled := true
-coverageMinimum := 80
-coverageFailOnMinimum := true
+version := "0.2"
 
 libraryDependencies ++= Seq(
   "org.typelevel" %% "cats-core" % "2.3.1",
