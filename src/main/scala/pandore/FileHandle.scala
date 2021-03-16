@@ -11,7 +11,8 @@ import cats.MonadError
 import cats.effect.Async
 import cats.implicits._
 import org.apache.commons.compress.compressors.{CompressorOutputStream, CompressorInputStream}
-import CompressionAlgorithm.CompressionAlgorithm
+import compression.{CompressionUtils, DecompressionUtils}
+import compression.CompressionAlgorithm.CompressionAlgorithm
 
 final case class FileHandle[F[_]](private val handle: File)(
   implicit private val A: Async[F],
