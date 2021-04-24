@@ -5,10 +5,10 @@ organization := "com.github.bertrand31"
 version := "0.2"
 
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-core" % "2.3.1",
-  "org.typelevel" %% "cats-effect" % "3.0.0-M5",
+  "org.typelevel" %% "cats-core" % "2.6.0",
+  "org.typelevel" %% "cats-effect" % "3.1.0",
   "org.apache.commons" % "commons-compress" % "1.20",
-  "org.scalatest" %% "scalatest" % "3.2.3" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.8" % Test,
 )
 
 scalacOptions ++= Seq(
