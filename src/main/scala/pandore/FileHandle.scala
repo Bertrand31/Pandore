@@ -15,7 +15,7 @@ import compression.{CompressionUtils, DecompressionUtils}
 import compression.CompressionAlgorithm.CompressionAlgorithm
 
 final case class FileHandle[F[_]](private val handle: File)(
-  implicit private val A: Async[F],
+  using private val A: Async[F],
   private val E: MonadError[F, Throwable],
 ) extends PureHandle[F] {
 
@@ -167,7 +167,7 @@ final case class FileHandle[F[_]](private val handle: File)(
 
 object FileHandle {
 
-  def createAt[F[_]](filePath: String)(implicit A: Async[F]): F[FileHandle[F]] =
+  def createAt[F[_]](filePath: String)(using A: Async[F]): F[FileHandle[F]] =
     A.delay {
       val file = new File(filePath)
       if (!file.exists) {
@@ -177,31 +177,30 @@ object FileHandle {
       FileHandle(file)
     }
 
-  def fromPath[F[_]](filePath: String)(implicit A: Async[F]): F[FileHandle[F]] =
+  def fromPath[F[_]](filePath: String)(using A: Async[F]): F[FileHandle[F]] =
     this.fromFile(new File(filePath))
 
-  def fromPathOrCreate[F[_]](filePath: String)(implicit A: Async[F]): F[FileHandle[F]] =
+  def fromPathOrCreate[F[_]](filePath: String)(using A: Async[F]): F[FileHandle[F]] =
     A.delay {
       val file = new File(filePath)
       if (file.exists && file.isFile) A.pure(FileHandle(file))
       else this.createAt(filePath)
     }.flatten
 
-  def fromFile[F[_]](file: File)(
-    implicit A: Async[F], E: MonadError[F, Throwable]
-  ): F[FileHandle[F]] =
+  def fromFile[F[_]](file: File)
+                    (using A: Async[F], E: MonadError[F, Throwable]): F[FileHandle[F]] =
     A.delay[F[FileHandle[F]]] {
       if (file.exists && file.isFile) A.pure(FileHandle(file))
       else E.raiseError(new FileNotFoundException)
     }.flatten
 
-  def fromFileOrCreate[F[+_]](file: File)(implicit A: Async[F]): F[FileHandle[F]] =
+  def fromFileOrCreate[F[+_]](file: File)(using A: Async[F]): F[FileHandle[F]] =
     A.delay {
       if (file.exists && file.isFile) A.pure(FileHandle(file))
       else this.createAt(file.getAbsolutePath)
     }.flatten
 
-  def existsAt[F[_]](path: String)(implicit A: Async[F]): F[Boolean] =
+  def existsAt[F[_]](path: String)(using A: Async[F]): F[Boolean] =
     A.delay {
       val handle = new File(path)
       handle.exists && handle.isFile

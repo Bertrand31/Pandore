@@ -1,4 +1,4 @@
-scalaVersion := "2.13.4"
+scalaVersion := "3.0.0-RC3"
 
 name := "Pandore"
 organization := "com.github.bertrand31"
@@ -18,10 +18,6 @@ scalacOptions ++= Seq(
   "-language:existentials", // Existential types (besides wildcard types) can be written and inferred
   "-language:higherKinds", // Allow higher-kinded types
   "-unchecked", // Enable additional warnings where generated code depends on assumptions
-  "-Xlint:_", // Enable all available style warnings
-  "-Ywarn-macros:after", // Only inspect expanded trees when generating unused symbol warnings
-  "-Ywarn-unused:_", // Enables all unused warnings
-  "-Ywarn-value-discard", // Warn when non-Unit expression results are unused
 )
 
 scalacOptions in Test --= Seq(
