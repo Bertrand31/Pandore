@@ -1,14 +1,14 @@
-scalaVersion := "3.0.0-RC3"
+scalaVersion := "3.0.0"
 
 name := "Pandore"
 organization := "com.github.bertrand31"
 version := "0.2"
 
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-core" % "2.6.0",
-  "org.typelevel" %% "cats-effect" % "3.1.0",
+  "org.typelevel" %% "cats-core" % "2.6.1",
+  "org.typelevel" %% "cats-effect" % "3.1.1",
   "org.apache.commons" % "commons-compress" % "1.20",
-  "org.scalatest" %% "scalatest" % "3.2.8" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.9" % Test,
 )
 
 scalacOptions ++= Seq(
@@ -20,7 +20,7 @@ scalacOptions ++= Seq(
   "-unchecked", // Enable additional warnings where generated code depends on assumptions
 )
 
-scalacOptions in Test --= Seq(
+Test / scalacOptions --= Seq(
   "-Xlint:_",
 )
 
@@ -29,5 +29,5 @@ publishTo := sonatypePublishToBundle.value
 credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
 
 // Test suite settings
-fork in Test := true
-parallelExecution in Test := false
+Test / fork := true
+Test / parallelExecution := false

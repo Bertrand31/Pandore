@@ -8,14 +8,14 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import scala.util.{Try, Using}
 import scala.io.Source
 import cats.MonadError
-import cats.effect.Async
+import cats.effect._
 import cats.implicits._
 import org.apache.commons.compress.compressors.{CompressorOutputStream, CompressorInputStream}
 import compression.{CompressionUtils, DecompressionUtils}
 import compression.CompressionAlgorithm.CompressionAlgorithm
 
 final case class FileHandle[F[_]](private val handle: File)(
-  using private val A: Async[F],
+  using private val S: Sync[F],
   private val E: MonadError[F, Throwable],
 ) extends PureHandle[F] {
 
@@ -24,7 +24,7 @@ final case class FileHandle[F[_]](private val handle: File)(
 
   def copyTo(destination: String): F[Unit] =
     this.getAbsolutePath.flatMap(path =>
-      A.delay {
+      S.blocking {
         Files.copy(
           Paths.get(path),
           Paths.get(destination),
@@ -35,7 +35,7 @@ final case class FileHandle[F[_]](private val handle: File)(
 
   def moveTo(destination: String): F[Unit] =
     this.getAbsolutePath.flatMap(path =>
-      A.delay {
+      S.blocking {
         Files.move(
           Paths.get(path),
           Paths.get(destination),
@@ -45,59 +45,59 @@ final case class FileHandle[F[_]](private val handle: File)(
     )
 
   def renameTo(destination: String): F[Unit] =
-    A.delay {
+    S.blocking {
       Try {
         assert(this.handle.renameTo(new File(destination)))
-      }.fold(E.raiseError, A.pure).void
-    }.flatten
+      }
+    }.flatMap(S.fromTry).void
 
   def getAbsolutePath: F[String] =
-    A.delay { handle.getAbsolutePath }
+    S.blocking { handle.getAbsolutePath }
 
-  def size: F[Long] =
-    A.delay { handle.length }
+  def size(using C: Concurrent[F]): F[Long] =
+    S.blocking { handle.length }
 
   def delete: F[Unit] =
-    A.delay { handle.delete }
+    S.blocking { handle.delete }
       .flatMap(
-        if (_) A.unit
+        if (_) S.unit
         else E.raiseError(new RuntimeException(s"Could not delete ${handle.getPath}"))
       )
 
   def canRead: F[Boolean] =
-    A.delay { handle.canRead }
+    S.blocking { handle.canRead }
 
   def canWrite: F[Boolean] =
-    A.delay { handle.canWrite }
+    S.blocking { handle.canWrite }
 
   def canExecute: F[Boolean] =
-    A.delay { handle.canExecute }
+    S.blocking { handle.canExecute }
 
   def isHidden: F[Boolean] =
-    A.delay { handle.isHidden }
+    S.blocking { handle.isHidden }
 
   def lastModified: F[Long] =
-    A.delay { handle.lastModified }
+    S.blocking { handle.lastModified }
 
   private val NewLine = '\n'
   private val NewLineByte = NewLine.toByte
 
   def writeByteLines(data: Array[Array[Byte]]): F[Unit] =
-    A.delay {
+    S.blocking {
       Using(new BufferedOutputStream(new FileOutputStream(handle, true))) { bos =>
         data.foreach(line => bos.write(line :+ NewLineByte))
-      }.fold(E.raiseError, A.pure).void
-    }.flatten
+      }
+    }.flatMap(S.fromTry).void
 
   def writeLinesProgressively(lines: => IterableOnce[_], chunkSize: Int = 10000): F[Unit] =
-    A.delay {
+    S.blocking {
       Using(new FileWriter(handle))(writer =>
         lines
           .iterator
           .sliding(chunkSize, chunkSize)
           .foreach((writer.write(_: String)) compose (_.mkString(NewLine.toString) :+ NewLine))
-      ).fold(E.raiseError, A.pure).void
-    }.flatten
+      )
+    }.flatMap(S.fromTry).void
 
   protected case class TransientCompressedFile(
     private val handle: FileHandle[F], private val algo: CompressionAlgorithm,
@@ -108,7 +108,7 @@ final case class FileHandle[F[_]](private val handle: File)(
 
     def writeTo(targetPath: String): F[FileHandle[F]] =
       handle.getAbsolutePath.flatMap(path =>
-        A.delay[F[FileHandle[F]]] {
+        S.blocking[F[FileHandle[F]]] {
           val targetFile = new File(targetPath)
           val byteArray = Files.readAllBytes(Paths.get(path))
           Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
@@ -124,14 +124,14 @@ final case class FileHandle[F[_]](private val handle: File)(
 
     def toByteArray: F[Array[Byte]] =
       handle.getAbsolutePath.flatMap(path =>
-        A.delay[F[Array[Byte]]] {
+        S.blocking[F[Array[Byte]]] {
           val byteArray = Files.readAllBytes(Paths.get(path))
           Using(new ByteArrayOutputStream(byteArray.size)) { bos =>
             Using(compressor(bos)) { compressed =>
               compressed.write(byteArray)
               bos.toByteArray
             }
-          }.flatten.fold(E.raiseError, A.pure)
+          }.flatten.fold(E.raiseError, S.pure)
         }.flatten
       )
   }
@@ -148,14 +148,14 @@ final case class FileHandle[F[_]](private val handle: File)(
 
     // TODO: improve this very inefficient method
     def writeTo(destinationPath: String): F[FileHandle[F]] =
-      A.delay[F[FileHandle[F]]] {
+      S.blocking[F[FileHandle[F]]] {
         val bis = new BufferedInputStream(new FileInputStream(handle.toJavaFile))
         val inputStream = decompressor(bis)
-        val bufferedSrc  = scala.io.Source.fromInputStream(inputStream)
+        val bufferedSrc  = Source.fromInputStream(inputStream)
         val destinationFile = new File(destinationPath)
         Using(new BufferedOutputStream(new FileOutputStream(destinationFile))) {
           _.write(bufferedSrc.iter.toArray.map(_.toByte))
-        }.fold(E.raiseError, _ => A.pure(FileHandle(destinationFile)))
+        }.fold(E.raiseError, _ => S.pure(FileHandle(destinationFile)))
       }.flatten
   }
 
@@ -167,8 +167,8 @@ final case class FileHandle[F[_]](private val handle: File)(
 
 object FileHandle {
 
-  def createAt[F[_]](filePath: String)(using A: Async[F]): F[FileHandle[F]] =
-    A.delay {
+  def createAt[F[_]](filePath: String)(using S: Sync[F]): F[FileHandle[F]] =
+    S.blocking {
       val file = new File(filePath)
       if (!file.exists) {
         file.getParentFile.mkdirs
@@ -177,31 +177,31 @@ object FileHandle {
       FileHandle(file)
     }
 
-  def fromPath[F[_]](filePath: String)(using A: Async[F]): F[FileHandle[F]] =
+  def fromPath[F[_]](filePath: String)(using S: Sync[F]): F[FileHandle[F]] =
     this.fromFile(new File(filePath))
 
-  def fromPathOrCreate[F[_]](filePath: String)(using A: Async[F]): F[FileHandle[F]] =
-    A.delay {
+  def fromPathOrCreate[F[_]](filePath: String)(using S: Sync[F]): F[FileHandle[F]] =
+    S.blocking {
       val file = new File(filePath)
-      if (file.exists && file.isFile) A.pure(FileHandle(file))
+      if (file.exists && file.isFile) S.pure(FileHandle(file))
       else this.createAt(filePath)
     }.flatten
 
   def fromFile[F[_]](file: File)
-                    (using A: Async[F], E: MonadError[F, Throwable]): F[FileHandle[F]] =
-    A.delay[F[FileHandle[F]]] {
-      if (file.exists && file.isFile) A.pure(FileHandle(file))
+                    (using S: Sync[F], E: MonadError[F, Throwable]): F[FileHandle[F]] =
+    S.blocking[F[FileHandle[F]]] {
+      if (file.exists && file.isFile) S.pure(FileHandle(file))
       else E.raiseError(new FileNotFoundException)
     }.flatten
 
-  def fromFileOrCreate[F[+_]](file: File)(using A: Async[F]): F[FileHandle[F]] =
-    A.delay {
-      if (file.exists && file.isFile) A.pure(FileHandle(file))
+  def fromFileOrCreate[F[+_]](file: File)(using S: Sync[F]): F[FileHandle[F]] =
+    S.blocking {
+      if (file.exists && file.isFile) S.pure(FileHandle(file))
       else this.createAt(file.getAbsolutePath)
     }.flatten
 
-  def existsAt[F[_]](path: String)(using A: Async[F]): F[Boolean] =
-    A.delay {
+  def existsAt[F[_]](path: String)(using S: Sync[F]): F[Boolean] =
+    S.blocking {
       val handle = new File(path)
       handle.exists && handle.isFile
     }
