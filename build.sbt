@@ -1,14 +1,18 @@
-scalaVersion := "3.0.0"
+scalaVersion := "3.1.0"
 
 name := "Pandore"
 organization := "com.github.bertrand31"
 version := "0.2"
 
+val Fs2Version = "3.2.7"
+
 libraryDependencies ++= Seq(
-  "org.typelevel" %% "cats-core" % "2.6.1",
-  "org.typelevel" %% "cats-effect" % "3.1.1",
+  "org.typelevel" %% "cats-core" % "2.7.0",
+  "org.typelevel" %% "cats-effect" % "3.3.11",
+  "co.fs2" %% "fs2-core" % Fs2Version,
+  "co.fs2" %% "fs2-io"   % Fs2Version,
   "org.apache.commons" % "commons-compress" % "1.20",
-  "org.scalatest" %% "scalatest" % "3.2.9" % Test,
+  "org.scalatest" %% "scalatest" % "3.2.12" % Test,
 )
 
 scalacOptions ++= Seq(
